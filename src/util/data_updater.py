@@ -4,7 +4,7 @@ from datetime import timedelta, datetime
 import os
 import pandas as pd
 from datetime import timedelta, datetime
-from data_downloader import stocks_download_crsp_daily
+from src.util.data_downloader import stocks_download_crsp_daily
 
 def update_crsp_data(existing_data_path, start_date, end_date=None):
     """
