@@ -3,7 +3,8 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 from langchain_community.llms import OpenAI
-from agent.portfolioAgent import DataCollector, PortfolioAgent
+from agent.PortfolioAgent import PortfolioAgent
+from agent.DataCollector import DataCollector
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

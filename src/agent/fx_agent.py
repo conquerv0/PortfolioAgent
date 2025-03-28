@@ -8,7 +8,8 @@ import requests
 from datetime import datetime
 from fredapi import Fred
 from openai import OpenAI
-from agent.portfolioAgent import DataCollector, PortfolioAgent
+from agent.PortfolioAgent import PortfolioAgent
+from agent.DataCollector import DataCollector
 
 # Add the parent directory to the path to import config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -199,7 +200,12 @@ class FXAgent(PortfolioAgent):
             return {"predicted_return": None, "confidence": None, "rationale": f"Error: {str(e)}"}
     
     def run_pipeline(self, start_date: str, end_date: str) -> pd.DataFrame:
-        combined_data = self.collect_data(start_date, end_date)
+        if os.path.exists('data/fx_combined_features.csv'):
+            combined_data = pd.read_csv('data/fx_combined_features.csv', index_col=0)
+            combined_data.index = pd.to_datetime(combined_data.index)
+        else:
+            combined_data = self.collect_data(start_date, end_date)
+            combined_data.to_csv('data/fx_combined_features.csv')
         predictions = []
         dates = []
         for date, row in combined_data.iterrows():
@@ -213,9 +219,7 @@ class FXAgent(PortfolioAgent):
             time.sleep(1) 
         return pd.DataFrame(predictions, index=dates)
 
-# ----------------------------
-# Example Execution of the FX Agent Pipeline
-# ----------------------------
+
 if __name__ == "__main__":
     fx_data_collector = FXDataCollector(full_start_date="2020-01-01", target_start_date="2023-11-01", end_date="2025-02-28")
     fx_agent = FXAgent(data_collector=fx_data_collector, llm_client=client)
