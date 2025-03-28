@@ -135,7 +135,10 @@ def download_daily_fred_series(api_key, start_date="2020-01-01", end_date=None):
         "1Y_Yield": "DGS1",      # 1-Year Treasury Constant Maturity Rate
         "2Y_Yield": "DGS2",      # 2-Year Treasury Constant Maturity Rate
         "5Y_Yield": "DGS5",      # 5-Year Treasury Constant Maturity Rate
-        "10Y_Yield": "DGS10"     # 10-Year Treasury Constant Maturity Rate
+        "10Y_Yield": "DGS10",     # 10-Year Treasury Constant Maturity Rate
+        'IRLTLT01EZM156N': 'EUR_T10Y',  # Euro Area 10-Year Rate
+        'IRLTLT01JPM156N': 'JPY_T10Y',  # Japan 10-Year Rate
+        'IRLTLT01GBM156N': 'GBP_T10Y',  # UK 10-Year Rate
     }
     
     data_frames = {}
@@ -157,17 +160,6 @@ def download_daily_fred_series(api_key, start_date="2020-01-01", end_date=None):
     return df
 
 def download_etf_full_data(tickers, start_date, end_date):
-    """
-    Download daily price data (Open, High, Low, Close, Volume) for ETF tickers using Yahoo Finance.
-    
-    Args:
-        tickers (list): List of ETF ticker symbols
-        start_date (str or datetime): Start date for data download
-        end_date (str or datetime): End date for data download
-        
-    Returns:
-        pandas.DataFrame: DataFrame containing the price data for all tickers
-    """
     logger.info(f"Downloading full price data for {len(tickers)} ETFs from {start_date} to {end_date}")
     
     try:

@@ -24,11 +24,6 @@ DATE_RANGES = {
     }
 }
 
-API_KEYS = {
-    "FRED": "e30921a9f946f68d5a8b438384681fba",
-    "WRDS": "vince_astra",
-}
-
 # Default portfolio definitions
 PORTFOLIOS = {
     # Equity sectors based on GICS classification
