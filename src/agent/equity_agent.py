@@ -54,7 +54,7 @@ class EquityAgent(PortfolioAgent):
         )
         data_collector = EquityDataCollector(etf_portfolio)
         super().__init__(name="EquityAgent", data_collector=data_collector, prompt_template=prompt_template, llm=llm)
-
+    
 
 # ----------------------------
 # Example Execution
