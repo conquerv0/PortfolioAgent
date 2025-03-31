@@ -8,7 +8,7 @@ import json
 import logging
 from dotenv import load_dotenv
 from config.settings import *
-from util.data_downloader import *
+from src.agent.DataCollector import *
 
 class PortfolioOptimizerModule:
     def __init__(self, portfolio: dict, expected_returns: pd.Series, cov_matrix: pd.DataFrame):
@@ -133,9 +133,9 @@ class PortfolioOptimizerModule:
 # Example usage:
 if __name__ == "__main__":
     # Example ETF portfolio (Fixed Income, "treasuries")
-    fixed_income_portfolio = PORTFOLIOS['treasuries']
+    fixed_income_portfolio = PORTFOLIOS['bond']['treasuries']
     # Dummy expected returns and covariance for demonstration.
-    tickers = extract_all_etf_tickers(fixed_income_portfolio)
+    tickers = extract_etf_tickers(fixed_income_portfolio)
     mu_example = pd.Series([0.04, 0.05, 0.06, 0.055, 0.07, 0.065], index=tickers)
     cov_example = pd.DataFrame(
         np.array([

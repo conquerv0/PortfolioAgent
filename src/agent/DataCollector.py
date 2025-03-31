@@ -28,57 +28,96 @@ class DataCollector:
     
     def download_etf_full_data(self, tickers, start_date, end_date) -> pd.DataFrame:
         """
-        Downloads full price data for a list of ETF tickers between the given dates.
-        It extracts Open, High, Low, Close, Volume and computes VWAP for each ticker.
+        Downloads full price data from yfinance for a list of ETF tickers between start_date and end_date.
+        Transforms the resulting panel data (MultiIndex) into a tidy DataFrame with columns:
+        Date, Ticker, Open, High, Low, Close, Volume, VWAP.
         """
-        logger.info(f"Downloading full price data for {len(tickers)} ETFs from {start_date} to {end_date}")
+        logger.info(f"Downloading data for {len(tickers)} ETFs from {start_date} to {end_date}")
         try:
-            data = yf.download(tickers, start=start_date, end=end_date, progress=False)
+            data = yf.download(tickers, start=start_date, end=end_date, progress=False, auto_adjust=False)
             if data.empty:
                 logger.error("No data downloaded")
                 return pd.DataFrame()
-            # For multiple tickers, data comes as a MultiIndex DataFrame; extract required columns.
-            price_data = data[['Open', 'High', 'Low', 'Close', 'Volume']]
-            # Calculate VWAP for each ticker: (High + Low + Close) / 3
-            for ticker in tickers:
-                if (ticker, 'High') in price_data.columns:
-                    price_data[(ticker, 'VWAP')] = (
-                        price_data[(ticker, 'High')] +
-                        price_data[(ticker, 'Low')] +
-                        price_data[(ticker, 'Close')]
-                    ) / 3
-            return price_data
+            df = data.copy()
+            df.reset_index(inplace=True)
+            # Ensure the date column is named "Date" (if index had no name, reset_index creates 'index')
+            if "Date" not in df.columns:
+                if "index" in df.columns:
+                    df.rename(columns={"index": "Date"}, inplace=True)
+                else:
+                    # Otherwise, force the first column to be 'Date'
+                    df.columns.values[0] = "Date"
+            # Check if we have a MultiIndex (e.g., price types) or flat columns
+            if isinstance(df.columns, pd.MultiIndex):
+                price_types = df.columns.levels[0].tolist()
+            else:
+                price_types = df.columns.tolist()
+            # We'll melt only the columns that correspond to price types other than Date.
+            tidy = pd.DataFrame()
+            if isinstance(df.columns, pd.MultiIndex):
+                for pt in price_types:
+                    if pt == "Date":
+                        continue
+                    temp = df[[pt]].copy()
+                    temp.columns = temp.columns.droplevel(0)
+                    try:
+                        temp = pd.melt(temp, id_vars=["Date"], var_name="Ticker", value_name=pt)
+                    except Exception as e:
+                        logger.error(f"Error during melt for {pt}: {e}")
+                        raise
+                    if tidy.empty:
+                        tidy = temp
+                    else:
+                        tidy = tidy.merge(temp, on=["Date", "Ticker"])
+            else:
+                tidy = df.copy()
+            # Ensure VWAP exists; if not, compute it from High, Low, Close.
+            if "VWAP" not in tidy.columns and {"High", "Low", "Close"}.issubset(tidy.columns):
+                tidy["VWAP"] = (tidy["High"] + tidy["Low"] + tidy["Close"]) / 3
+            tidy.sort_values(["Date", "Ticker"], inplace=True)
+            return tidy
         except Exception as e:
             logger.error(f"Error downloading ETF data: {str(e)}")
             return pd.DataFrame()
     
-    def estimate_covariance_matrix(self, price_data: pd.DataFrame, method: str = "ledoit_wolf") -> pd.DataFrame:
+    def download_etf_adj_close(self, tickers, start_date, end_date) -> pd.DataFrame:
         """
-        Estimates the covariance matrix of ETF returns using downloaded price data.
-        
-        This function first extracts the "Close" prices (if the DataFrame has a MultiIndex),
-        calculates daily percentage returns, and then computes the covariance matrix using one of:
-            - "sample": the standard sample covariance estimator.
-            - "ledoit_wolf": a robust covariance estimator using the Ledoit-Wolf shrinkage method.
+        Downloads adjusted close price data for a list of ETF tickers between start_date and end_date.
+        Returns a panel DataFrame with dates as index and tickers as columns.
         
         Parameters:
-            price_data (pd.DataFrame): Historical price data with dates as the index.
-                For MultiIndex columns, the "Close" price is expected.
-            method (str): Estimation method ("sample" or "ledoit_wolf").
+            tickers (list): List of ETF ticker strings.
+            start_date (str): Start date in YYYY-MM-DD format.
+            end_date (str): End date in YYYY-MM-DD format.
         
         Returns:
-            pd.DataFrame: Estimated covariance matrix of asset returns.
+            pd.DataFrame: DataFrame of adjusted close prices.
         """
-        # If price_data has MultiIndex columns, extract the 'Close' prices.
-        if isinstance(price_data.columns, pd.MultiIndex):
-            if 'Close' in price_data.columns.levels[1]:
-                close_prices = price_data.xs('Close', axis=1, level=1)
-            else:
-                raise ValueError("MultiIndex price data must include 'Close' prices.")
+        logger.info(f"Downloading adjusted close data for {len(tickers)} ETFs from {start_date} to {end_date}")
+        try:
+            # Download raw data with auto_adjust set to False so that 'Adj Close' is available.
+            data = yf.download(tickers, start=start_date, end=end_date, progress=False, auto_adjust=False)
+            if data.empty:
+                logger.error("No data downloaded")
+                return pd.DataFrame()
+            # Extract only the 'Adj Close' column; this creates a DataFrame with dates as index and tickers as columns.
+            adj_close = data['Adj Close']
+            return adj_close
+        except Exception as e:
+            logger.error(f"Error downloading ETF data: {str(e)}")
+            return pd.DataFrame()
+
+    def estimate_covariance_matrix(self, price_data: pd.DataFrame, method: str = "ledoit_wolf") -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
+        """
+        Given panel data of adjusted close prices (dates as index, tickers as columns),
+        computes daily returns and estimates the covariance matrix.
+        """
+        # If the data has columns labeled "Adj Close", use that; otherwise, assume price_data is already panel.
+        if "Adj Close" in price_data.columns:
+            close_prices = price_data["Adj Close"]
         else:
             close_prices = price_data
-        
-        # Calculate daily returns
+        close_prices.index = pd.to_datetime(close_prices.index)
         returns = close_prices.pct_change().dropna()
         
         if method == "sample":
@@ -87,10 +126,37 @@ class DataCollector:
             lw = LedoitWolf().fit(returns)
             cov_matrix = pd.DataFrame(lw.covariance_, index=returns.columns, columns=returns.columns)
         else:
-            raise ValueError(f"Unknown method: {method}. Supported methods: 'sample', 'ledoit_wolf'")
-        
-        return cov_matrix
+            raise ValueError(f"Unknown method: {method}")
+        return cov_matrix, close_prices, returns
     
+def extract_etf_tickers(portfolio: dict, key: str = "treasuries") -> list:
+    """
+    Extracts ETF tickers from a portfolio dictionary.
+
+    Parameters:
+        portfolio (dict): Portfolio dictionary structured with a key (e.g. "treasuries") 
+                          mapping to a list of asset dictionaries.
+                          Example:
+                          {
+                              "treasuries": [
+                                  {"name": "Short-Term Treasury", "etf": "SHV", "maturity": "0-1yr", "weight": 0.0},
+                                  {"name": "1-3 Year Treasury", "etf": "SHY", "maturity": "1-3yr", "weight": 0.0},
+                                  ...
+                              ]
+                          }
+        key (str): The key in the dictionary where the asset list is stored (default "treasuries").
+
+    Returns:
+        list: A list of ETF tickers extracted from the portfolio.
+    """
+    tickers = []
+    assets = portfolio.get(key, [])
+    for asset in assets:
+        ticker = asset.get("etf")
+        if ticker:
+            tickers.append(ticker)
+    return tickers
+
 
 # Example usage:
 if __name__ == "__main__":

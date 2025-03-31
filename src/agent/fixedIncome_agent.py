@@ -8,8 +8,8 @@ import yfinance as yf
 from datetime import datetime
 from fredapi import Fred
 from openai import OpenAI
-from agent.PortfolioAgent import PortfolioAgent
-from agent.DataCollector import DataCollector
+from PortfolioAgent import *
+from DataCollector import *
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -171,7 +171,7 @@ class FixedIncomeAgent(PortfolioAgent):
 # ----------------------------
 if __name__ == "__main__":
     # Define the fixed income portfolio
-    fixed_income_portfolio = PORTFOLIOS["treasuries"]
+    fixed_income_portfolio = PORTFOLIOS['bond']['treasuries']
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     # Instantiate the data collector and agent

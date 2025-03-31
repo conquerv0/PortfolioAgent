@@ -17,12 +17,20 @@ import logging
 from pathlib import Path
 from fredapi import Fred
 
+from config.settings import *
+from dotenv import load_dotenv
+
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+FRED_API_KEY = os.getenv("FRED_API_KEY")
+WRDS_USERNAME = os.getenv("WRDS_USERNAME")
+
 # Add the project directory to the Python path
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 # Import configuration settings
-from src.config.settings import DATA_PATHS, PORTFOLIOS, DATE_RANGES, API_KEYS
+from src.config.settings import DATA_PATHS, PORTFOLIOS, DATE_RANGES
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -297,4 +305,4 @@ if __name__=='__main__':
     #     locals()[var_name] = rp_data        
     #     csv_filename = f'rp_data{str(year)[-2:]}{str(next_year)[-2:]}.csv'
     #     rp_data.to_csv(os.path.join(path_data, csv_filename))
-    fred_data = download_daily_fred_series(API_KEYS["FRED"], start_date="2023-01-01")
+    fred_data = download_daily_fred_series(FRED_API_KEY, start_date="2023-01-01")
