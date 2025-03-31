@@ -9,6 +9,8 @@ DATA_PATHS = {
 }
 
 # Default date ranges
+
+'''
 DATE_RANGES = {
     "training": {
         "start_date": date(2020, 1, 1),
@@ -21,6 +23,14 @@ DATE_RANGES = {
     "validation": {
         "start_date": date(2024, 1, 1),
         "end_date": date.today(),
+    }
+}  
+'''
+
+DATE_RANGES = {
+    "test_period": {
+        "start_date": date(2023, 11, 1),
+        "end_date": date(2025, 3, 31),
     }
 }
 
@@ -72,18 +82,14 @@ PORTFOLIOS = {
         ],
     },
     
-    # G10 currencies
+    # G5 currencies
     "fx": {
         "currencies": [
             {"name": "EUR/USD", "etf": "FXE", "weight": 0.0},
-            {"name": "GBP/USD", "etf": "FXB", "weight": 0.0},
             {"name": "USD/JPY", "etf": "FXY", "weight": 0.0},
-            {"name": "USD/CAD", "etf": "FXC", "weight": 0.0},
-            {"name": "AUD/USD", "etf": "FXA", "weight": 0.0},
+            {"name": "GBP/USD", "etf": "FXB", "weight": 0.0},
             {"name": "USD/CHF", "etf": "FXF", "weight": 0.0},
-            {"name": "NZD/USD", "etf": "BNZ", "weight": 0.0},
-            {"name": "USD/SEK", "etf": "FXS", "weight": 0.0},
-            {"name": "USD/NOK", "etf": "NORW", "weight": 0.0},
+            {"name": "USD/CAD", "etf": "FXC", "weight": 0.0},
         ],
     }
 }
