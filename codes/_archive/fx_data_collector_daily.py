@@ -8,7 +8,7 @@ import os
 # Add the parent directory to the path so we can import the config module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def get_currency_etf_data(start_date='2020-01-01', end_date='2025-03-31'):
+def get_currency_etf_data(start_date='2020-01-01', end_date='2025-02-28'):
     """Get currency ETF data for G5 currencies"""
     tickers = [
         'FXE',  # Euro
@@ -38,6 +38,21 @@ def get_currency_etf_data(start_date='2020-01-01', end_date='2025-03-31'):
     
     return etf_data
 
+def get_exchange_rates(start_date='2020-01-01', end_date='2025-02-28'):
+    """Get exchange rates for G5 currencies against USD"""
+    # Define currency pairs
+    pairs = [
+        'EURUSD=X',  # Euro
+        'GBPUSD=X',  # British Pound
+        'USDJPY=X',  # Japanese Yen
+        'USDCHF=X',  # Swiss Franc
+        'USDCAD=X',  # Canadian Dollar
+    ]
+    
+    # Download exchange rate data
+    data = yf.download(pairs, start=start_date, end=end_date)
+    return data['Close']
+
 def get_momentum_factors(df):
     """Calculate momentum factors"""
     momentum_data = df.copy()
@@ -55,7 +70,7 @@ def get_momentum_factors(df):
     
     return momentum_data
 
-def get_risk_sentiment_data(start_date='2020-01-01', end_date='2025-03-31'):
+def get_risk_sentiment_data(start_date='2020-01-01', end_date='2025-02-28'):
     """Get risk sentiment data"""
     # Download market indices
     indices = {
@@ -85,7 +100,7 @@ def get_risk_sentiment_data(start_date='2020-01-01', end_date='2025-03-31'):
     
     return risk_data
 
-def get_interest_rates(start_date='2020-01-01', end_date='2025-03-31'):
+def get_interest_rates(start_date='2020-01-01', end_date='2025-02-28'):
     """Get 10-year interest rates for G5 economies from local CSV files"""
     try:
         # Define file paths and column mappings for G5 countries
@@ -130,6 +145,10 @@ def get_interest_rates(start_date='2020-01-01', end_date='2025-03-31'):
             mask = (rates_data.index >= pd.to_datetime(start_date)) & (rates_data.index <= pd.to_datetime(end_date))
             rates_data = rates_data[mask]
             
+            # Calculate daily changes for all rates
+            for col in rates_data.columns:
+                rates_data[f'{col}_change'] = rates_data[col].diff()
+            
             # Forward fill missing values (some rates might have gaps)
             rates_data = rates_data.ffill()
             
@@ -147,7 +166,7 @@ def main():
     # Set date ranges
     full_start_date = '2020-01-01'  # Start from 2020 for momentum calculation
     target_start_date = '2023-11-01'  # Target period start
-    end_date = '2025-03-31'
+    end_date = '2025-02-28'
     
     print("Starting data collection...")
     
@@ -163,6 +182,14 @@ def main():
     print("\nCalculating momentum factors...")
     data_with_momentum = get_momentum_factors(etf_data)
     print(f"Added momentum factors. Shape: {data_with_momentum.shape}")
+    
+    # Get exchange rates
+    print("\nCollecting exchange rates...")
+    exchange_rates = get_exchange_rates(full_start_date, end_date)
+    if exchange_rates.empty:
+        print("Error: No exchange rate data collected")
+        return
+    print(f"Collected exchange rates. Shape: {exchange_rates.shape}")
     
     # Get risk sentiment data
     print("\nCollecting risk sentiment data...")
@@ -182,6 +209,7 @@ def main():
     print("\nCombining all data...")
     combined_data = pd.concat([
         data_with_momentum,
+        exchange_rates,
         risk_data,
         rates_data
     ], axis=1)
@@ -201,33 +229,11 @@ def main():
         print("Error: No data remaining after filtering")
         return
     
-    # Save daily data to CSV
-    print("\nSaving daily data to CSV...")
-    output_file_daily = 'data/fx_combined_features_daily.csv'
-    combined_data.to_csv(output_file_daily)
-    print(f"Daily data saved to '{output_file_daily}'")
-    
-    # Create weekly data
-    print("\nCreating weekly data...")
-    # Resample to weekly (end of week)
-    weekly_data = combined_data.resample('W-FRI').last()
-    
-    # Calculate weekly changes for 10-year interest rates
-    print("Calculating weekly changes for 10-year interest rates...")
-    for rate in rates_data.columns:
-        weekly_data[f'{rate}_weekly_change'] = weekly_data[rate].pct_change()
-
-    # Calculate weekly changes for risk sentiment data
-    print("Calculating weekly changes for risk sentiment data...")
-    for sentiment in risk_data.columns:
-        weekly_data[f'{sentiment}_weekly_change'] = weekly_data[sentiment].pct_change()
-    
-    # Save weekly data to CSV
-    print("\nSaving weekly data to CSV...")
-    output_file_weekly = 'data/fx_combined_features_weekly.csv'
-    weekly_data.to_csv(output_file_weekly)
-    print(f"Weekly data collection completed. Final weekly dataset shape: {weekly_data.shape}")
-    print(f"Weekly data saved to '{output_file_weekly}'")
+    # Save to CSV
+    print("\nSaving data to CSV...")
+    combined_data.to_csv('data/fx_combined_features.csv')
+    print(f"Data collection completed. Final dataset shape: {combined_data.shape}")
+    print("Data saved to 'data/fx_combined_features.csv'")
 
 if __name__ == "__main__":
     main() 
