@@ -241,6 +241,33 @@ def download_all_etf_full_data(start_date=None, end_date=None):
     
     return etf_data
 
+def extract_etf_tickers(portfolio: dict, key: str = "treasuries") -> list:
+    """
+    Extracts ETF tickers from a portfolio dictionary.
+
+    Parameters:
+        portfolio (dict): Portfolio dictionary structured with a key (e.g. "treasuries") 
+                          mapping to a list of asset dictionaries.
+                          Example:
+                          {
+                              "treasuries": [
+                                  {"name": "Short-Term Treasury", "etf": "SHV", "maturity": "0-1yr", "weight": 0.0},
+                                  {"name": "1-3 Year Treasury", "etf": "SHY", "maturity": "1-3yr", "weight": 0.0},
+                                  ...
+                              ]
+                          }
+        key (str): The key in the dictionary where the asset list is stored (default "treasuries").
+
+    Returns:
+        list: A list of ETF tickers extracted from the portfolio.
+    """
+    tickers = []
+    assets = portfolio.get(key, [])
+    for asset in assets:
+        ticker = asset.get("etf")
+        if ticker:
+            tickers.append(ticker)
+    return tickers
 
 if __name__=='__main__':
     start_year_crsp = 2020
