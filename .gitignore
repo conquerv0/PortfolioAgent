@@ -25,6 +25,7 @@ config.py
 
 # Data files
 data/
+playground.ipynb
 
 # Environment
 .env

@@ -25,6 +25,7 @@ from config.settings import *
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 FRED_API_KEY = os.getenv("FRED_API_KEY")
+WRDS_USERNAME = os.getenv("WRDS_USERNAME")
 
 PREDICTION_SCHEMA = {
     "name": "fi_prediction",
@@ -143,6 +144,38 @@ def get_risk_sentiment_data(start_date='2020-01-01', end_date='2025-03-31'):
             logger.error(f"Error downloading {ticker}: {e}")
     return risk_data
 
+def get_etf_return(tickers, start_date: str, end_date: str) -> pd.DataFrame:
+    """
+    Downloads daily price data for the treasury ETFs from CRSP by joining dsf with dsenames.
+    
+    Parameters:
+        start_date (str): Start date in 'YYYY-MM-DD' format.
+        end_date (str): End date in 'YYYY-MM-DD' format.
+    
+    Returns:
+        pd.DataFrame: DataFrame containing date, ticker, price, and daily return.
+    """
+    tickers_str = ",".join(f"'{ticker}'" for ticker in tickers)
+    
+    db = wrds.Connection(USER_NAME=WRDS_USERNAME)
+    
+    # Join dsf (daily file) with dsenames to get ticker information.
+    # The join condition uses the date to ensure we use the correct ticker for each period.
+    query = f"""
+    SELECT a.date, b.ticker, a.prc as price, a.ret as daily_return
+    FROM crsp.dsf as a
+    JOIN crsp.dsenames as b
+      ON a.permno = b.permno
+    WHERE b.ticker IN ({tickers_str})
+      AND a.date BETWEEN '{start_date}' AND '{end_date}'
+      AND a.date BETWEEN b.namedt AND COALESCE(b.nameendt, '{end_date}')
+    ORDER BY a.date, b.ticker
+    """
+    df_prices = db.raw_sql(query)
+    db.close()
+    
+    return df_prices['daily return']
+
 # ----------------------------
 # Fixed Income Specific Implementations
 # ----------------------------
@@ -183,7 +216,7 @@ class FixedIncomeDataCollector(DataCollector):
         
         # Get Treasury ETF data for the fixed income portfolio
         logger.info("Downloading Treasury ETF data...")
-        treasury_etf_data = self.get_etf_data(tickers, start_date=self.full_start_date, end_date=self.end_date)
+        treasury_etf_data = self.get_etf_return(tickers, start_date=self.full_start_date, end_date=self.end_date)
         if treasury_etf_data.empty:
             logger.warning("No Treasury ETF data collected.")
         else:
@@ -261,13 +294,12 @@ class FixedIncomeAgent(PortfolioAgent):
         - MOVE Index: {MOVE:.2f} (Weekly change: {MOVE_weekly_change:.3f})
 
         Based on the above data, please predict next week's yield changes for the following fixed income instruments:
-        - US 10-Year (based on 10Y_Yield)
-        - US 5-Year (based on 5Y_Yield)
-        - US 2-Year (based on 2Y_Yield)
-        - EUR 10-Year (based on EUR_T10Y)
-        - JPY 10-Year (based on JPY_T10Y)
-        - UK 10-Year (based on GBP_T10Y)
-
+        -"Short-Term Treasury",
+        -"1-3 Year Treasury",
+        -"3-7 Year Treasury",
+        -"7-10 Year Treasury",
+        -"10-20 Year Treasury",
+        -"20+ Year Treasury"
         For each instrument, provide:
         1. The predicted yield change as a decimal (e.g., -0.0025 for a -0.25% change),
         2. A confidence score between 0 and 1,
