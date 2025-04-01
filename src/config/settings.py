@@ -52,7 +52,6 @@ PORTFOLIOS = {
             {"name": "Materials", "etf": "XLB", "weight": 0.0},
         ],
     },
-    
     # Bond maturity buckets and credit quality segments
     "bond": {
         "treasuries": [
@@ -86,8 +85,8 @@ PORTFOLIOS = {
     "fx": {
         "currencies": [
             {"name": "EUR/USD", "etf": "FXE", "weight": 0.0},
-            {"name": "USD/JPY", "etf": "FXY", "weight": 0.0},
             {"name": "GBP/USD", "etf": "FXB", "weight": 0.0},
+            {"name": "USD/JPY", "etf": "FXY", "weight": 0.0},
             {"name": "USD/CHF", "etf": "FXF", "weight": 0.0},
             {"name": "USD/CAD", "etf": "FXC", "weight": 0.0},
         ],

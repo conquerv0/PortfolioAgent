@@ -2,7 +2,7 @@ import os
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
-from langchain_community.llms import OpenAI
+from openai import OpenAI
 import sys
 import logging 
 import numpy as np
@@ -17,68 +17,31 @@ from config.settings import *
 from dotenv import load_dotenv
 
 load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 class DataCollector:
+    def __init__(self):
+        self.FRED_API_KEY = os.getenv("FRED_API_KEY")
+
     def collect_data(self, start_date: str, end_date: str) -> pd.DataFrame:
         """
         Abstract method to collect and return a combined DataFrame of features.
         """
         raise NotImplementedError("Subclasses must implement collect_data.")
     
-    def download_etf_full_data(self, tickers, start_date, end_date) -> pd.DataFrame:
-        """
-        Downloads full price data from yfinance for a list of ETF tickers between start_date and end_date.
-        Transforms the resulting panel data (MultiIndex) into a tidy DataFrame with columns:
-        Date, Ticker, Open, High, Low, Close, Volume, VWAP.
-        """
-        logger.info(f"Downloading data for {len(tickers)} ETFs from {start_date} to {end_date}")
-        try:
-            data = yf.download(tickers, start=start_date, end=end_date, progress=False, auto_adjust=False)
-            if data.empty:
-                logger.error("No data downloaded")
-                return pd.DataFrame()
-            df = data.copy()
-            df.reset_index(inplace=True)
-            # Ensure the date column is named "Date" (if index had no name, reset_index creates 'index')
-            if "Date" not in df.columns:
-                if "index" in df.columns:
-                    df.rename(columns={"index": "Date"}, inplace=True)
-                else:
-                    # Otherwise, force the first column to be 'Date'
-                    df.columns.values[0] = "Date"
-            # Check if we have a MultiIndex (e.g., price types) or flat columns
-            if isinstance(df.columns, pd.MultiIndex):
-                price_types = df.columns.levels[0].tolist()
-            else:
-                price_types = df.columns.tolist()
-            # We'll melt only the columns that correspond to price types other than Date.
-            tidy = pd.DataFrame()
-            if isinstance(df.columns, pd.MultiIndex):
-                for pt in price_types:
-                    if pt == "Date":
-                        continue
-                    temp = df[[pt]].copy()
-                    temp.columns = temp.columns.droplevel(0)
-                    try:
-                        temp = pd.melt(temp, id_vars=["Date"], var_name="Ticker", value_name=pt)
-                    except Exception as e:
-                        logger.error(f"Error during melt for {pt}: {e}")
-                        raise
-                    if tidy.empty:
-                        tidy = temp
-                    else:
-                        tidy = tidy.merge(temp, on=["Date", "Ticker"])
-            else:
-                tidy = df.copy()
-            # Ensure VWAP exists; if not, compute it from High, Low, Close.
-            if "VWAP" not in tidy.columns and {"High", "Low", "Close"}.issubset(tidy.columns):
-                tidy["VWAP"] = (tidy["High"] + tidy["Low"] + tidy["Close"]) / 3
-            tidy.sort_values(["Date", "Ticker"], inplace=True)
-            return tidy
-        except Exception as e:
-            logger.error(f"Error downloading ETF data: {str(e)}")
+    def get_etf_data(tickers, start_date='2020-01-01', end_date='2025-03-31'):
+        logger.info(f"Downloading data for {len(tickers)} ETFs...")
+        data = yf.download(tickers, start=start_date, end=end_date)
+        if data.empty:
+            logger.error("Error: No ETF data available")
             return pd.DataFrame()
+        etf_data = data['Close'].copy()
+        missing_data = etf_data.isnull().sum()
+        if missing_data.any():
+            logger.warning("Missing data points per ETF:")
+            for ticker, count in missing_data.items():
+                if count > 0:
+                    logger.warning(f"{ticker}: {count} missing points")
+        return etf_data
     
     def download_etf_adj_close(self, tickers, start_date, end_date) -> pd.DataFrame:
         """

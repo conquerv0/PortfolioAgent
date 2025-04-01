@@ -2,7 +2,7 @@ import os
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
-from langchain_community.llms import OpenAI
+from openai import OpenAI
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
