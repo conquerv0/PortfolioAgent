@@ -1,5 +1,5 @@
 from src.agent import DataCollector
-from src.optimizer.optimizer import PortfolioOptimizerModule
+from optimizer.PortfolioOptimizer import PortfolioOptimizerModule
 import pandas as pd
 import matplotlib.pyplot as plt
 import logging

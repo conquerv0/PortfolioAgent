@@ -293,40 +293,49 @@ class FixedIncomeAgent(PortfolioAgent):
         - VIX Index: {VIX:.2f} (Weekly change: {VIX_weekly_change:.3f})
         - MOVE Index: {MOVE:.2f} (Weekly change: {MOVE_weekly_change:.3f})
 
-        Based on the above data, please predict next week's yield changes for the following fixed income instruments:
-        -"Short-Term Treasury",
-        -"1-3 Year Treasury",
-        -"3-7 Year Treasury",
-        -"7-10 Year Treasury",
-        -"10-20 Year Treasury",
-        -"20+ Year Treasury"
+        Treasury ETF Return:
+        - Short-Term Treasury (SHV): {SHV:.2f}
+        - 1-3 Year Treasury (SHY): {SHY:.2f}
+        - 3-7 Year Treasury (IEI): {IEI:.2f}
+        - 7-10 Year Treasury (IEF): {IEF:.2f}
+        - 10-20 Year Treasury (TLH): {TLH:.2f}
+        - 20+ Year Treasury (TLT): {TLT:.2f}
+
+        Based on the above data, please predict next week's return for the following treasury ETF instruments:
+        - Short-Term Treasury (SHV)
+        - 1-3 Year Treasury (SHY)
+        - 3-7 Year Treasury (IEI)
+        - 7-10 Year Treasury (IEF)
+        - 10-20 Year Treasury (TLH)
+        - 20+ Year Treasury (TLT)
+
         For each instrument, provide:
-        1. The predicted yield change as a decimal (e.g., -0.0025 for a -0.25% change),
+        1. The predicted expected return for next week as a decimal,
         2. A confidence score between 0 and 1,
         3. A brief rationale for the prediction.
-
-        Also, include an overall fixed income market analysis that incorporates these macro indicators, yield levels, momentum signals, and risk sentiment.
+        4. Provide an overall fixed income market analysis that incorporates these macro indicators, yield levels, momentum signals, and risk sentiment.
 
         Your response must be structured in the required JSON format.
         """
         try:
             formatted_prompt = prompt.format(**row.to_dict())
         except KeyError as e:
-            print(f"Warning: Missing data for key {e}. Filling with default 0.0 values.")
+            print(f"Warning: Missing data for key {e}. Filling missing values with 0.0.")
             row_copy = row.copy()
-            default_cols = [
+            required_cols = [
+                'EFFR', 'Headline_PCE', 'Core_PCE',
+                '3M_Yield', '6M_Yield', '1Y_Yield', '2Y_Yield', '5Y_Yield', '10Y_Yield',
+                'EUR_T10Y', 'JPY_T10Y', 'GBP_T10Y',
                 '3M_Yield_mom_1m', '3M_Yield_mom_3m', '3M_Yield_mom_12m',
                 '6M_Yield_mom_1m', '6M_Yield_mom_3m', '6M_Yield_mom_12m',
                 '1Y_Yield_mom_1m', '1Y_Yield_mom_3m', '1Y_Yield_mom_12m',
                 '2Y_Yield_mom_1m', '2Y_Yield_mom_3m', '2Y_Yield_mom_12m',
                 '5Y_Yield_mom_1m', '5Y_Yield_mom_3m', '5Y_Yield_mom_12m',
                 '10Y_Yield_mom_1m', '10Y_Yield_mom_3m', '10Y_Yield_mom_12m',
-                'EFFR', 'Headline_PCE', 'Core_PCE',
-                '3M_Yield', '6M_Yield', '1Y_Yield', '2Y_Yield', '5Y_Yield', '10Y_Yield',
-                'JPY_T10Y', 'GBP_T10Y',
-                'VIX', 'VIX_weekly_change', 'MOVE', 'MOVE_weekly_change'
+                'VIX', 'VIX_weekly_change', 'MOVE', 'MOVE_weekly_change',
+                'SHV', 'SHY', 'IEI', 'IEF', 'TLH', 'TLT'
             ]
-            for col in default_cols:
+            for col in required_cols:
                 if col not in row_copy or pd.isna(row_copy[col]):
                     row_copy[col] = 0.0
             formatted_prompt = prompt.format(**row_copy.to_dict())
@@ -354,12 +363,12 @@ class FixedIncomeAgent(PortfolioAgent):
             print(f"Error getting prediction: {e}")
             return {
                 "instruments": [
-                    {"instrument": "Short-Term Treasury", "predicted_yield_change": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"instrument": "1-3 Year Treasury", "predicted_yield_change": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"instrument": "3-7 Year Treasury", "predicted_yield_change": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"instrument": "7-10 Year Treasury", "predicted_yield_change": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"instrument": "10-20 Year Treasury", "predicted_yield_change": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"instrument": "20+ Year Treasury", "predicted_yield_change": None, "confidence": 0, "rationale": f"Error: {str(e)}"}
+                    {"instrument": "Short-Term Treasury", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "1-3 Year Treasury", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "3-7 Year Treasury", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "7-10 Year Treasury", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "10-20 Year Treasury", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "20+ Year Treasury", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"}
                 ],
                 "overall_analysis": f"Failed to generate predictions due to error: {str(e)}"
             }
