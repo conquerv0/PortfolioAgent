@@ -339,14 +339,6 @@ def main():
     for metric, value in overall_metrics.items():
         print(f"{metric}: {value:.4f}")
     
-    print("\n==== METRICS BY CURRENCY PAIR ====")
-    for pair, metrics in pair_metrics.items():
-        print(f"\n{pair}:")
-        for metric, value in metrics.items():
-            if metric != 'Count':
-                print(f"  {metric}: {value:.4f}")
-            else:
-                print(f"  {metric}: {value}")
     
     # Save evaluation results to CSV
     eval_df.to_csv('data/evaluation/prediction_evaluation.csv', index=False)

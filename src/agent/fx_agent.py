@@ -8,8 +8,8 @@ import requests
 from datetime import datetime
 from fredapi import Fred
 from openai import OpenAI
-from agent.PortfolioAgent import PortfolioAgent
-from agent.DataCollector import DataCollector
+from PortfolioAgent import *
+from DataCollector import *
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -121,9 +121,9 @@ def get_risk_sentiment_data(start_date='2020-01-01', end_date='2025-03-31'):
     return risk_data
 
 def get_interest_rates(start_date='2020-01-01', end_date='2025-03-31'):
-    """Get 10-year interest rates for G5 economies from local CSV files"""
+    """Get 10-year interest rates for major economies from local CSV files"""
     try:
-        # Define file paths and column mappings for G5 countries
+        # Define file paths and column mappings for major countries
         rate_files = {
             'US_T10Y': 'data/Investing Government Bond Yield Data/United States 10-Year Bond Yield Historical Data.csv',
             'GBP_T10Y': 'data/Investing Government Bond Yield Data/United Kingdom 10-Year Bond Yield Historical Data.csv',
@@ -276,7 +276,7 @@ class FXDataCollector(DataCollector):
 class FXAgent(PortfolioAgent):
     """
     FXAgent uses FXDataCollector to retrieve detailed features and then
-    performs deep LLM analysis (via GPT‑4o) to forecast UUP’s next-day return.
+    performs deep LLM analysis (via GPT‑4o) to forecast UUP's next-day return.
     """
     def __init__(self, data_collector: FXDataCollector, llm_client: OpenAI):
         super().__init__(name="FXAgent", data_collector=data_collector, llm_client=llm_client)
@@ -285,7 +285,7 @@ class FXAgent(PortfolioAgent):
     def prepare_prompt(self, row: pd.Series) -> str:
         # Build a detailed prompt that includes all the necessary market data.
         prompt = """
-        Based on the following weekly financial market data, predict the next week's returns for the G5 currency pairs.
+        Based on the following weekly financial market data, predict the next week's returns for the major currency pairs.
         This week's market data:
         1. Currency ETFs:
         - Euro (FXE): {FXE:.4f} (mom_1m: {FXE_mom_1m:.4f}, mom_3m: {FXE_mom_3m:.4f}, mom_12m: {FXE_mom_12m:.4f})
@@ -306,7 +306,7 @@ class FXAgent(PortfolioAgent):
         - VIX Index: {VIX:.2f} (Weekly Δ: {VIX_weekly_change:.3f})
         - MOVE Index: {MOVE:.2f} (Weekly Δ: {MOVE_weekly_change:.3f})
 
-        For each of the G5 currency pairs (EUR/USD, GBP/USD, USD/JPY, USD/CHF, USD/CAD):
+        For each of the major currency pairs (EUR/USD, GBP/USD, USD/JPY, USD/CHF, USD/CAD):
         1. Predict next week's return as a decimal (e.g., 0.0025 for a 0.25% increase)
         2. Provide a confidence score between 0 and 1 (where 0 is no confidence and 1 is complete certainty)
         3. Give a brief rationale specific to each currency pair
@@ -341,7 +341,7 @@ class FXAgent(PortfolioAgent):
             response = client.chat.completions.create(
                 model="gpt-4o-mini",  # Using GPT-4o mini
                 messages=[
-                    {"role": "system", "content": "You are a financial market expert providing accurate predictions for G5 currency movements. Your analysis should be based on fundamental and technical factors."},
+                    {"role": "system", "content": "You are a financial market expert providing accurate predictions for major currency movements. Your analysis should be based on fundamental and technical factors."},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_schema", "json_schema": PREDICTION_SCHEMA},
@@ -490,6 +490,7 @@ if __name__ == "__main__":
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     fx_data_collector = FXDataCollector(
+        portfolio=fx_portfolio,
         full_start_date="2020-01-01", 
         target_start_date="2023-11-01", 
         end_date="2025-02-28")
