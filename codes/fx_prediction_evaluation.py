@@ -124,61 +124,7 @@ def calculate_metrics(eval_df):
     
     return metrics, pair_metrics
 
-def calculate_trading_performance(eval_df):
-    """
-    Calculate performance metrics for a simple trading strategy based on predictions
-    """
-    # Create a copy of the evaluation dataframe for strategy analysis
-    strategy_df = eval_df.copy()
-    
-    # Filter out rows with missing data
-    strategy_df = strategy_df.dropna(subset=['predicted_return', 'actual_return'])
-    
-    # Calculate returns for different strategies
-    # 1. Simple directional strategy (long/short based on prediction sign)
-    strategy_df['dir_strategy_return'] = np.sign(strategy_df['predicted_return']) * strategy_df['actual_return']
-    
-    # 2. Confidence-weighted strategy
-    strategy_df['conf_strategy_return'] = np.sign(strategy_df['predicted_return']) * strategy_df['confidence'] * strategy_df['actual_return']
-    
-    # 3. Size-proportional strategy (size position based on predicted magnitude)
-    norm_factor = strategy_df['predicted_return'].abs().mean()  # Normalization factor
-    strategy_df['size_strategy_return'] = (strategy_df['predicted_return'] / norm_factor) * strategy_df['actual_return']
-    
-    # Calculate strategy performance metrics
-    strategies = ['dir_strategy_return', 'conf_strategy_return', 'size_strategy_return']
-    strategy_performance = {}
-    baseline_return = strategy_df['actual_return'].mean()
-    
-    for strategy in strategies:
-        strategy_returns = strategy_df[strategy]
-        strategy_performance[strategy] = {
-            'Mean Return': strategy_returns.mean(),
-            'Cumulative Return': (1 + strategy_returns).prod() - 1,
-            'Sharpe Ratio': strategy_returns.mean() / strategy_returns.std() if strategy_returns.std() > 0 else 0,
-            'Win Rate': (strategy_returns > 0).mean(),
-            'vs Baseline': strategy_returns.mean() - baseline_return
-        }
-    
-    # Calculate performance by currency pair and strategy
-    pair_strategy_performance = {}
-    for pair in strategy_df['currency_pair'].unique():
-        pair_data = strategy_df[strategy_df['currency_pair'] == pair]
-        pair_strategy_performance[pair] = {}
-        
-        pair_baseline = pair_data['actual_return'].mean()
-        
-        for strategy in strategies:
-            strategy_returns = pair_data[strategy]
-            pair_strategy_performance[pair][strategy] = {
-                'Mean Return': strategy_returns.mean(),
-                'Cumulative Return': (1 + strategy_returns).prod() - 1,
-                'vs Baseline': strategy_returns.mean() - pair_baseline
-            }
-    
-    return strategy_performance, pair_strategy_performance, strategy_df
-
-def create_visualizations(eval_df, strategy_df):
+def create_visualizations(eval_df):
     """
     Create visualizations to analyze prediction performance
     """
@@ -198,52 +144,53 @@ def create_visualizations(eval_df, strategy_df):
     plt.tight_layout()
     plt.savefig('data/evaluation/predicted_vs_actual.png')
     
-    # 2. Performance over time by currency pair
-    # Group by date and currency pair to calculate average performance
-    time_perf = strategy_df.groupby(['date', 'currency_pair'])['dir_strategy_return'].mean().reset_index()
-    time_perf_pivot = time_perf.pivot(index='date', columns='currency_pair', values='dir_strategy_return')
-    
-    plt.figure(figsize=(12, 8))
-    time_perf_pivot.cumsum().plot()
-    plt.title('Cumulative Strategy Returns by Currency Pair')
-    plt.xlabel('Date')
-    plt.ylabel('Cumulative Return')
-    plt.tight_layout()
-    plt.savefig('data/evaluation/cumulative_returns_by_pair.png')
-    
-    # 3. Confidence vs accuracy
+    # 2. Confidence vs accuracy
     # Check the number of unique confidence values
-    unique_confidence = strategy_df['confidence'].nunique()
+    eval_clean = eval_df.dropna(subset=['predicted_return', 'actual_return'])
+    unique_confidence = eval_clean['confidence'].nunique()
     print(f"Number of unique confidence values: {unique_confidence}")
     
     try:
         # Try to create confidence bins, but handle duplicate bin edges
         if unique_confidence >= 5:
             # If we have enough unique values, use qcut with duplicates='drop'
-            strategy_df['confidence_bin'] = pd.qcut(strategy_df['confidence'], 5, labels=False, duplicates='drop')
+            bins = pd.qcut(eval_clean['confidence'], 5, duplicates='drop')
+            eval_clean['confidence_bin'] = bins
+            
+            # Get the bin ranges for labeling
+            bin_labels = [f"{b.left:.2f}-{b.right:.2f}" for b in bins.cat.categories]
         else:
-            # If we have fewer unique values, use fewer bins or just use the values directly
+            # If we have fewer unique values, use fewer bins
             if unique_confidence <= 1:
                 # If only one confidence value, we can't bin
                 print("Only one unique confidence value - skipping confidence binning analysis")
                 raise ValueError("Not enough unique confidence values for binning")
             else:
                 # Use cut instead of qcut with the number of unique values
-                strategy_df['confidence_bin'] = pd.cut(strategy_df['confidence'], 
-                                                       bins=min(unique_confidence, 5), 
-                                                       labels=False)
+                bins = pd.cut(eval_clean['confidence'], bins=min(unique_confidence, 5))
+                eval_clean['confidence_bin'] = bins
+                
+                # Get the bin ranges for labeling
+                bin_labels = [f"{b.left:.2f}-{b.right:.2f}" for b in bins.categories]
         
         # Calculate directional accuracy by confidence bin
-        conf_accuracy = strategy_df.groupby('confidence_bin').apply(
+        conf_accuracy = eval_clean.groupby('confidence_bin').apply(
             lambda x: (np.sign(x['predicted_return']) == np.sign(x['actual_return'])).mean()
         ).reset_index()
-        conf_accuracy.columns = ['confidence_bin', 'directional_accuracy']
         
-        plt.figure(figsize=(10, 6))
-        sns.barplot(x='confidence_bin', y='directional_accuracy', data=conf_accuracy)
-        plt.title('Directional Accuracy by Confidence Bin')
-        plt.xlabel('Confidence Bin (Low to High)')
+        # Create a simpler version of the bin labels for plotting
+        conf_accuracy['bin_label'] = [f"{b.left:.2f}-{b.right:.2f}" for b in conf_accuracy['confidence_bin']]
+        conf_accuracy = conf_accuracy.sort_values(by='bin_label')
+        
+        # Plot with actual confidence ranges
+        plt.figure(figsize=(12, 6))
+        bar_plot = sns.barplot(x='bin_label', y=0, data=conf_accuracy)
+        plt.title('Directional Accuracy by Confidence Level')
+        plt.xlabel('Confidence Range')
         plt.ylabel('Directional Accuracy')
+        
+        # Rotate x-axis labels if needed
+        plt.xticks(rotation=45)
         plt.tight_layout()
         plt.savefig('data/evaluation/accuracy_by_confidence.png')
         
@@ -251,28 +198,115 @@ def create_visualizations(eval_df, strategy_df):
         print(f"Error creating confidence bin visualization: {e}")
         print("Creating alternate confidence visualization...")
         
-        # Alternative: Plot scatter of confidence vs accuracy
+        # Alternative: Create a binned scatter plot
         plt.figure(figsize=(10, 6))
-        correct_direction = np.sign(strategy_df['predicted_return']) == np.sign(strategy_df['actual_return'])
-        plt.scatter(strategy_df['confidence'], correct_direction, alpha=0.5)
+        correct_direction = np.sign(eval_clean['predicted_return']) == np.sign(eval_clean['actual_return'])
+        
+        # Get unique confidence values and sort them
+        confidence_values = sorted(eval_clean['confidence'].unique())
+        accuracy_by_conf = []
+        
+        # Calculate accuracy for each unique confidence value
+        for conf in confidence_values:
+            mask = eval_clean['confidence'] == conf
+            accuracy = correct_direction[mask].mean()
+            accuracy_by_conf.append(accuracy)
+        
+        # Create a bar plot with actual confidence values
+        plt.bar(
+            [str(round(c, 2)) for c in confidence_values],
+            accuracy_by_conf, 
+            alpha=0.7
+        )
         plt.title('Confidence vs Prediction Accuracy')
-        plt.xlabel('Confidence Score')
-        plt.ylabel('Correct Direction (1=Yes, 0=No)')
+        plt.xlabel('Confidence Value')
+        plt.ylabel('Directional Accuracy')
+        plt.xticks(rotation=45)
         plt.tight_layout()
         plt.savefig('data/evaluation/confidence_vs_accuracy.png')
+
+def analyze_pair_confidence(eval_df):
+    """
+    Analyze the relationship between confidence levels and accuracy for each currency pair
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs('data/evaluation', exist_ok=True)
     
-    # 4. Strategy performance comparison
-    strategy_cols = ['dir_strategy_return', 'conf_strategy_return', 'size_strategy_return']
-    cumulative_returns = (1 + strategy_df[strategy_cols]).cumprod() - 1
+    # Filter out rows with missing data
+    eval_clean = eval_df.dropna(subset=['predicted_return', 'actual_return'])
     
+    # Calculate directional accuracy for each pair
+    pairs = eval_clean['currency_pair'].unique()
+    
+    # Create a dataframe to store the results
+    pair_confidence_df = pd.DataFrame(columns=['Currency Pair', 'Avg Confidence', 'Directional Accuracy', 'Sample Size'])
+    
+    # Calculate metrics for each pair
+    for pair in pairs:
+        pair_data = eval_clean[eval_clean['currency_pair'] == pair]
+        
+        # Calculate average confidence
+        avg_confidence = pair_data['confidence'].mean()
+        
+        # Calculate directional accuracy
+        dir_accuracy = (np.sign(pair_data['predicted_return']) == np.sign(pair_data['actual_return'])).mean()
+        
+        # Add to dataframe
+        pair_confidence_df = pair_confidence_df._append({
+            'Currency Pair': pair,
+            'Avg Confidence': avg_confidence,
+            'Directional Accuracy': dir_accuracy,
+            'Sample Size': len(pair_data)
+        }, ignore_index=True)
+    
+    # Sort by directional accuracy
+    pair_confidence_df = pair_confidence_df.sort_values('Directional Accuracy', ascending=False)
+    
+    # Create a bar plot comparing confidence and accuracy by pair
     plt.figure(figsize=(12, 8))
-    cumulative_returns.plot()
-    plt.title('Cumulative Returns by Strategy')
-    plt.xlabel('Observation')
-    plt.ylabel('Cumulative Return')
-    plt.legend(['Directional', 'Confidence-Weighted', 'Size-Proportional'])
+    
+    # Set up positions for bars
+    bar_positions = np.arange(len(pairs))
+    bar_width = 0.35
+    
+    # Create bars
+    plt.bar(bar_positions - bar_width/2, pair_confidence_df['Avg Confidence'], 
+            width=bar_width, color='skyblue', label='Avg Confidence')
+    plt.bar(bar_positions + bar_width/2, pair_confidence_df['Directional Accuracy'], 
+            width=bar_width, color='orange', label='Directional Accuracy')
+    
+    # Add pair names on x-axis
+    plt.xticks(bar_positions, pair_confidence_df['Currency Pair'])
+    
+    # Add labels and title
+    plt.xlabel('Currency Pair')
+    plt.ylabel('Value')
+    plt.title('Average Confidence vs Directional Accuracy by Currency Pair')
+    plt.legend()
+    
+    # Add sample size as text above each pair
+    for i, pos in enumerate(bar_positions):
+        plt.text(pos, max(pair_confidence_df['Avg Confidence'].max(), 
+                          pair_confidence_df['Directional Accuracy'].max()) + 0.05, 
+                 f"n={pair_confidence_df['Sample Size'].iloc[i]}", 
+                 ha='center')
+    
+    plt.ylim(0, 1.1)  # Set y-axis limit to accommodate the sample size text
     plt.tight_layout()
-    plt.savefig('data/evaluation/strategy_comparison.png')
+    plt.savefig('data/evaluation/pair_confidence_vs_accuracy.png')
+    
+    # Save the data to CSV
+    pair_confidence_df.to_csv('data/evaluation/pair_confidence_accuracy.csv', index=False)
+    
+    # Print the results
+    print("\n==== CONFIDENCE & ACCURACY BY CURRENCY PAIR ====")
+    for _, row in pair_confidence_df.iterrows():
+        print(f"{row['Currency Pair']}:")
+        print(f"  Avg Confidence: {row['Avg Confidence']:.4f}")
+        print(f"  Directional Accuracy: {row['Directional Accuracy']:.4f}")
+        print(f"  Sample Size: {row['Sample Size']}")
+    
+    return pair_confidence_df
 
 def main():
     # Load data
@@ -292,13 +326,13 @@ def main():
     print("Calculating performance metrics...")
     overall_metrics, pair_metrics = calculate_metrics(eval_df)
     
-    # Calculate trading strategy performance
-    print("Calculating trading strategy performance...")
-    strategy_perf, pair_strategy_perf, strategy_df = calculate_trading_performance(eval_df)
-    
     # Create visualizations
     print("Creating visualizations...")
-    create_visualizations(eval_df, strategy_df)
+    create_visualizations(eval_df)
+    
+    # Analyze confidence and accuracy by currency pair
+    print("Analyzing confidence and accuracy by currency pair...")
+    pair_confidence_df = analyze_pair_confidence(eval_df)
     
     # Display the results
     print("\n==== OVERALL PREDICTION METRICS ====")
@@ -313,13 +347,6 @@ def main():
                 print(f"  {metric}: {value:.4f}")
             else:
                 print(f"  {metric}: {value}")
-    
-    print("\n==== TRADING STRATEGY PERFORMANCE ====")
-    for strategy, perf in strategy_perf.items():
-        strategy_name = strategy.replace('_strategy_return', '')
-        print(f"\n{strategy_name.capitalize()} Strategy:")
-        for metric, value in perf.items():
-            print(f"  {metric}: {value:.4f}")
     
     # Save evaluation results to CSV
     eval_df.to_csv('data/evaluation/prediction_evaluation.csv', index=False)
