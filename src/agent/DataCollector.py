@@ -20,8 +20,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class DataCollector:
-    def __init__(self):
+    def __init__(self, full_start_date: str, target_start_date: str, end_date: str):
         self.FRED_API_KEY = os.getenv("FRED_API_KEY")
+        self.WRDS_USERNAME = os.getenv("WRDS_USERNAME")
+        self.full_start_date = full_start_date
+        self.target_start_date = target_start_date
+        self.end_date = end_date
 
     def collect_data(self, start_date: str, end_date: str) -> pd.DataFrame:
         """
@@ -29,7 +33,7 @@ class DataCollector:
         """
         raise NotImplementedError("Subclasses must implement collect_data.")
     
-    def get_etf_data(tickers, start_date='2020-01-01', end_date='2025-03-31'):
+    def get_etf_data(self, tickers, start_date, end_date):
         logger.info(f"Downloading data for {len(tickers)} ETFs...")
         data = yf.download(tickers, start=start_date, end=end_date)
         if data.empty:
@@ -44,7 +48,44 @@ class DataCollector:
                     logger.warning(f"{ticker}: {count} missing points")
         return etf_data
     
-    def download_etf_adj_close(self, tickers, start_date, end_date) -> pd.DataFrame:
+    def get_etf_return(self,tickers, start_date: str, end_date: str) -> pd.DataFrame:
+        """
+        Downloads daily price data for the treasury ETFs from CRSP by joining dsf with dsenames.
+        
+        Parameters:
+            start_date (str): Start date in 'YYYY-MM-DD' format.
+            end_date (str): End date in 'YYYY-MM-DD' format.
+        
+        Returns:
+            pd.DataFrame: DataFrame containing date, ticker, price, and daily return.
+        """
+        tickers_str = ",".join(f"'{ticker}'" for ticker in tickers)
+        
+        db = wrds.Connection(USER_NAME=self.WRDS_USERNAME)
+        
+        # Join dsf (daily file) with dsenames to get ticker information.
+        # The join condition uses the date to ensure we use the correct ticker for each period.
+        query = f"""
+        SELECT a.date, b.ticker, a.prc as price, a.ret as daily_return
+        FROM crsp.dsf as a
+        JOIN crsp.dsenames as b
+        ON a.permno = b.permno
+        WHERE b.ticker IN ({tickers_str})
+        AND a.date BETWEEN '{start_date}' AND '{end_date}'
+        AND a.date BETWEEN b.namedt AND COALESCE(b.nameendt, '{end_date}')
+        ORDER BY a.date, b.ticker
+        """
+        df_prices = db.raw_sql(query)
+        db.close()
+        
+        # Pivot the data so that the date becomes the index and each ticker is a column.
+        df_returns = df_prices.pivot(index='date', columns='ticker', values='daily_return')
+        df_returns.fillna(0, inplace=True)
+        
+        return df_returns
+
+    
+    def get_etf_adj_close(self, tickers, start_date, end_date) -> pd.DataFrame:
         """
         Downloads adjusted close price data for a list of ETF tickers between start_date and end_date.
         Returns a panel DataFrame with dates as index and tickers as columns.
@@ -131,7 +172,7 @@ if __name__ == "__main__":
     
     collector = DataCollector()
     # Here, one would subclass DataCollector to implement collect_data; however, for covariance estimation we use download_etf_full_data.
-    price_data = collector.download_etf_full_data(tickers, start_date, end_date)
+    price_data = collector.get_etf_full_data(tickers, start_date, end_date)
     cov_matrix = collector.estimate_covariance_matrix(price_data, method="ledoit_wolf")
     
     print("Estimated Covariance Matrix:")

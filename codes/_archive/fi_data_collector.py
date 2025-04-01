@@ -124,7 +124,7 @@ def main():
     
     # Get Treasury ETF data for the fixed income portfolio
     logger.info("Downloading Treasury ETF data...")
-    treasury_etf_data = get_treasury_etf_data(start_date=full_start_date, end_date=end_date)
+    treasury_etf_data = get_etf_data(start_date=full_start_date, end_date=end_date)
     if treasury_etf_data.empty:
         logger.warning("No Treasury ETF data collected.")
     else:

@@ -80,7 +80,7 @@ PREDICTION_SCHEMA = {
 # ----------------------------
 # Fixed Income Data Download Functions
 # ----------------------------
-def get_fred_series(api_key, start_date="2020-01-01", end_date=None, freq='W'):
+def get_fred_series(api_key, start_date, end_date, freq='D'):
     fred_local = Fred(api_key=api_key)
     series_dict = {
         "EFFR": "EFFR",          # Effective Federal Funds Rate
@@ -91,10 +91,10 @@ def get_fred_series(api_key, start_date="2020-01-01", end_date=None, freq='W'):
         "1Y_Yield": "DGS1",      # 1-Year Treasury Constant Maturity Rate
         "2Y_Yield": "DGS2",      # 2-Year Treasury Constant Maturity Rate
         "5Y_Yield": "DGS5",      # 5-Year Treasury Constant Maturity Rate
-        "10Y_Yield": "DGS10",    # 10-Year Treasury Constant Maturity Rate
-        'IRLTLT01EZM156N': 'EUR_T10Y',  # Euro Area 10-Year Rate
-        'IRLTLT01JPM156N': 'JPY_T10Y',  # Japan 10-Year Rate
-        'IRLTLT01GBM156N': 'GBP_T10Y'   # UK 10-Year Rate
+        "10Y_Yield": "DGS10"   # 10-Year Treasury Constant Maturity Rate
+        # 'IRLTLT01EZM156N': 'EUR_T10Y',  # Euro Area 10-Year Rate
+        # 'IRLTLT01JPM156N': 'JPY_T10Y',  # Japan 10-Year Rate
+        # 'IRLTLT01GBM156N': 'GBP_T10Y'   # UK 10-Year Rate
     }
     
     data_frames = {}
@@ -115,7 +115,7 @@ def get_fred_series(api_key, start_date="2020-01-01", end_date=None, freq='W'):
 
 def get_yield_momentum(df):
     momentum_data = df.copy()
-    yield_cols = ["3M_Yield", "6M_Yield", "1Y_Yield", "2Y_Yield", "5Y_Yield", "10Y_Yield", "EUR_T10Y", "JPY_T10Y", "GBP_T10Y"]
+    yield_cols = ["3M_Yield", "6M_Yield", "1Y_Yield", "2Y_Yield", "5Y_Yield", "10Y_Yield"]
     for col in yield_cols:
         if col in df.columns:
             series = df[col].ffill()
@@ -125,7 +125,7 @@ def get_yield_momentum(df):
             logger.info(f"Computed momentum for {col}.")
     return momentum_data
 
-def get_risk_sentiment_data(start_date='2020-01-01', end_date='2025-03-31'):
+def get_risk_sentiment_data(start_date, end_date):
     indices = {
         '^VIX': 'VIX',
         '^MOVE': 'MOVE'
@@ -144,38 +144,6 @@ def get_risk_sentiment_data(start_date='2020-01-01', end_date='2025-03-31'):
             logger.error(f"Error downloading {ticker}: {e}")
     return risk_data
 
-def get_etf_return(tickers, start_date: str, end_date: str) -> pd.DataFrame:
-    """
-    Downloads daily price data for the treasury ETFs from CRSP by joining dsf with dsenames.
-    
-    Parameters:
-        start_date (str): Start date in 'YYYY-MM-DD' format.
-        end_date (str): End date in 'YYYY-MM-DD' format.
-    
-    Returns:
-        pd.DataFrame: DataFrame containing date, ticker, price, and daily return.
-    """
-    tickers_str = ",".join(f"'{ticker}'" for ticker in tickers)
-    
-    db = wrds.Connection(USER_NAME=WRDS_USERNAME)
-    
-    # Join dsf (daily file) with dsenames to get ticker information.
-    # The join condition uses the date to ensure we use the correct ticker for each period.
-    query = f"""
-    SELECT a.date, b.ticker, a.prc as price, a.ret as daily_return
-    FROM crsp.dsf as a
-    JOIN crsp.dsenames as b
-      ON a.permno = b.permno
-    WHERE b.ticker IN ({tickers_str})
-      AND a.date BETWEEN '{start_date}' AND '{end_date}'
-      AND a.date BETWEEN b.namedt AND COALESCE(b.nameendt, '{end_date}')
-    ORDER BY a.date, b.ticker
-    """
-    df_prices = db.raw_sql(query)
-    db.close()
-    
-    return df_prices['daily return']
-
 # ----------------------------
 # Fixed Income Specific Implementations
 # ----------------------------
@@ -184,15 +152,13 @@ class FixedIncomeDataCollector(DataCollector):
     Downloads macro data from FRED and full price/volume data for a fixed income portfolio.
     Combines the macro indicators with ETF price data into a single DataFrame.
     """
-    def __init__(self, portfolio: dict, full_start_date: str = "2023-01-01", target_start_date: str = "2023-11-01", end_date: str = "2025-03-31"):
+    def __init__(self, portfolio: dict, full_start_date: str, target_start_date: str, end_date: str):
+        super().__init__(full_start_date, target_start_date, end_date)
         self.portfolio = portfolio
-        self.full_start_date = full_start_date
-        self.target_start_date = target_start_date
-        self.end_date = end_date
 
     def collect_data(self, start_date: str, end_date: str) -> pd.DataFrame:
         # Extract ETF tickers from the portfolio
-        tickers = [entry["etf"] for entry in self.portfolio['bonds'].get("treasuries", [])]
+        tickers = [entry["etf"] for entry in self.portfolio.get("treasuries", [])]
 
         logger.info("Starting fixed income data collection...")
         
@@ -200,6 +166,7 @@ class FixedIncomeDataCollector(DataCollector):
         logger.info("Downloading FRED series...")
         fred_data = get_fred_series(FRED_API_KEY, start_date=self.full_start_date, end_date=self.end_date)
         logger.info(f"Downloaded FRED data with shape: {fred_data.shape}")
+        print(fred_data.tail())
         
         # Compute momentum for yield series
         logger.info("Computing yield momentum factors...")
@@ -208,7 +175,7 @@ class FixedIncomeDataCollector(DataCollector):
         
         # Get risk sentiment data (VIX and MOVE)
         logger.info("Downloading risk sentiment data...")
-        risk_data = get_risk_sentiment_data(start_date=self.self.self.full_start_date, end_date=self.end_date)
+        risk_data = get_risk_sentiment_data(start_date=self.full_start_date, end_date=self.end_date)
         if risk_data.empty:
             logger.warning("No risk sentiment data collected.")
         else:
@@ -216,18 +183,25 @@ class FixedIncomeDataCollector(DataCollector):
         
         # Get Treasury ETF data for the fixed income portfolio
         logger.info("Downloading Treasury ETF data...")
-        treasury_etf_data = self.get_etf_return(tickers, start_date=self.full_start_date, end_date=self.end_date)
+        treasury_etf_data = self.get_etf_return(tickers, self.full_start_date, self.end_date)
         if treasury_etf_data.empty:
             logger.warning("No Treasury ETF data collected.")
         else:
             logger.info(f"Treasury ETF data shape: {treasury_etf_data.shape}")
         
         # Combine all data: macro, momentum, risk sentiment, and Treasury ETF prices
-        logger.info("Combining FRED, risk sentiment, and Treasury ETF data...")
+        if not isinstance(fred_with_momentum.index, pd.DatetimeIndex):
+            fred_with_momentum.index = pd.to_datetime(fred_with_momentum.index)
+        if not isinstance(risk_data.index, pd.DatetimeIndex):
+            risk_data.index = pd.to_datetime(risk_data.index)
+        if not isinstance(treasury_etf_data.index, pd.DatetimeIndex):
+            treasury_etf_data.index = pd.to_datetime(treasury_etf_data.index)
+            
+        # Now concat with axis=1 to preserve row alignment by datetime
         combined_data = pd.concat([fred_with_momentum, risk_data, treasury_etf_data], axis=1)
-        logger.info(f"Combined daily data shape: {combined_data.shape}")
         
         # Filter for target period
+        print(combined_data.tail())
         combined_data = combined_data[self.target_start_date:self.end_date]
         logger.info(f"Data filtered to target period: {combined_data.shape}")
         
@@ -398,7 +372,7 @@ class FixedIncomeAgent(PortfolioAgent):
             data = pd.read_csv('data/fi_combined_features_weekly.csv', index_col=0)
             data.index = pd.to_datetime(data.index)
         else:
-            self.data_collector.collect_data(start_date, end_date)
+            data = self.data_collector.collect_data(start_date, end_date)
         predictions = []
         dates = []
         total_weeks = len(data)
@@ -492,21 +466,21 @@ class FixedIncomeAgent(PortfolioAgent):
 # ----------------------------
 if __name__ == "__main__":
     # Define the fixed income portfolio
-    fixed_income_portfolio = PORTFOLIOS['bond']['treasuries']
+    fixed_income_portfolio = PORTFOLIOS['bond']
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     # Instantiate the data collector and agent
     fixed_income_data_collector = FixedIncomeDataCollector(
         portfolio=fixed_income_portfolio,
-        full_start_date="2020-01-01",
+        full_start_date="2023-01-01",
         target_start_date="2023-11-01",
-        end_date="2025-02-28"
+        end_date="2024-12-31"
     )
     fixed_income_agent = FixedIncomeAgent(data_collector=fixed_income_data_collector, llm_client=client)
     
     # Define the time window for data collection/prediction
     start_date = "2023-11-01"
-    end_date = "2025-02-28"
+    end_date = "2025-12-31"
     
     # Run the pipeline and print the resulting predictions
     result_df = fixed_income_agent.run_pipeline(start_date, end_date)
