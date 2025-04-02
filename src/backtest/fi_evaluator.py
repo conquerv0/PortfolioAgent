@@ -32,37 +32,35 @@ class FixedIncomeEvaluator(Evaluator):
             "10-20 Year Treasury": "TLH",
             "20+ Year Treasury": "TLT"
         }
-        
+
         etf_tickers = list(treasury_to_etf.values())
-        # Create a new DataFrame to hold next week's returns for each ETF
-        actual_returns = pd.DataFrame({'date': self.actual_data['date']})
-        
-        for etf in etf_tickers:
-            if etf in self.actual_data.columns:
-                # Data already contains returns, so just shift to get next week's returns
-                actual_returns[f'{etf}_return'] = self.actual_data[etf].shift(-1)
-            else:
-                print(f"Warning: {etf} column not found in actual data.")
-        
-        # Drop the last row since next week's return is not available
-        actual_returns = actual_returns.dropna()
-        
-        # Merge predictions with actual returns based on date
+
+        # Ensure the 'date' column is a datetime and set it as the index
+        self.actual_data['date'] = pd.to_datetime(self.actual_data['date'])
+        actual_data = self.actual_data.set_index('date')
+
+        # Aggregate daily returns into weekly returns using Friday as the week-end.
+        # Here, we compound the returns: (product of (1+daily_return)) - 1
+        weekly_returns = actual_data[etf_tickers].resample('W-FRI').apply(lambda x: (x + 1).prod() - 1)
+
+        # Shift weekly returns to get next week's return
+        weekly_returns_shifted = weekly_returns.shift(-1).dropna().reset_index()
+
+        # Merge predictions (assumed to be weekly) with actual weekly returns based on the date.
         evaluation_data = []
         for _, row in self.predictions.iterrows():
-            date = row['date']
-            instrument = row['instrument']  # e.g. "Short-Term Treasury"
-            etf_ticker = treasury_to_etf.get(instrument, None)
+            pred_date = pd.to_datetime(row['date'])
+            instrument = row['instrument']  # e.g., "Short-Term Treasury"
+            etf_ticker = treasury_to_etf.get(instrument)
             if etf_ticker is None:
                 continue
-            
-            matching_returns = actual_returns[actual_returns['date'] == date]
-            if not matching_returns.empty:
-                actual_return = matching_returns[f'{etf_ticker}_return'].values[0]
+            matching_week = weekly_returns_shifted[weekly_returns_shifted['date'] == pred_date]
+            if not matching_week.empty:
+                actual_return = matching_week[etf_ticker].values[0]
                 eval_row = row.copy()
                 eval_row['actual_return'] = actual_return
                 evaluation_data.append(eval_row)
-        
+
         eval_df = pd.DataFrame(evaluation_data)
         return eval_df
     

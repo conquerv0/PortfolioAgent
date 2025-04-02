@@ -144,6 +144,55 @@ def get_risk_sentiment_data(start_date, end_date):
             logger.error(f"Error downloading {ticker}: {e}")
     return risk_data
 
+def load_bond_etf_returns(filepath: str) -> pd.DataFrame:
+    """
+    Load bond ETF data from a CSV file and compute the full daily return for each ETF.
+    
+    The CSV file is expected to have at least the following columns:
+        - date: Trading date
+        - ticker: ETF ticker
+        - prc: Price (which may be negative for adjustments)
+        - ret: Daily price return (as a decimal)
+        - divamt: Dividend (or coupon) cash amount
+        - vwretd: Value-weighted total return (includes distributions)
+        
+    The function computes:
+        dividend_yield = divamt / abs(prc)   if prc is nonzero, else 0.
+        full_return = vwretd (if available) else ret + dividend_yield.
+    
+    The final DataFrame is pivoted so that the row index is the date and the columns are the ticker names.
+    
+    Parameters:
+        filepath (str): Path to the CSV file.
+    
+    Returns:
+        pd.DataFrame: Daily full return DataFrame with date as index and ticker as columns.
+    """
+    # Load the CSV file; ensure the date column is parsed as datetime.
+    df = pd.read_csv(filepath, parse_dates=['date'])
+    
+    # Ensure the required columns are present.
+    required_columns = ['date', 'ticker', 'prc', 'ret', 'divamt', 'vwretd']
+    missing = [col for col in required_columns if col not in df.columns]
+    if missing:
+        raise ValueError("Missing required columns: " + ", ".join(missing))
+    
+    # Compute dividend yield when price is nonzero.
+    df['dividend_yield'] = df.apply(lambda row: row['divamt'] / abs(row['prc']) if row['prc'] != 0 else 0, axis=1)
+    
+    # Compute full return:
+    # If vwretd is available (non-null), use it; otherwise, add the dividend yield to the price return.
+    df['computed_return'] = df.apply(
+        lambda row: row['vwretd'] if pd.notnull(row['vwretd']) else (row['ret'] + row['dividend_yield']),
+        axis=1
+    )
+    
+    # Pivot the DataFrame so that 'date' becomes the index and each ticker is a column.
+    full_return_df = df.pivot(index='date', columns='ticker', values='computed_return')
+    full_return_df.fillna(0, inplace=True)
+    
+    return full_return_df
+
 # ----------------------------
 # Fixed Income Specific Implementations
 # ----------------------------
@@ -155,6 +204,61 @@ class FixedIncomeDataCollector(DataCollector):
     def __init__(self, portfolio: dict, full_start_date: str, target_start_date: str, end_date: str):
         super().__init__(full_start_date, target_start_date, end_date)
         self.portfolio = portfolio
+
+    def get_bond_etf_full_return(self, tickers, start_date: str, end_date: str) -> pd.DataFrame:
+        """
+        Downloads daily price data for bond ETFs from the CRSP Q library (DSF table) by joining DSF with DSENAMES,
+        computes the full daily return (including coupon/dividend yield) for each ETF, and returns a DataFrame with 
+        date as the row index and ticker as the column.
+        
+        The full return is computed as:
+        full_return = ret + (divamt/abs(prc))   if prc is nonzero and dividend data is available;
+        otherwise, if vwretd is available (and non-null), that is used.
+        
+        Parameters:
+        tickers (list): List of ETF tickers.
+        start_date (str): Start date in 'YYYY-MM-DD' format.
+        end_date (str): End date in 'YYYY-MM-DD' format.
+        
+        Returns:
+        pd.DataFrame: DataFrame with dates as index and tickers as columns containing the full daily return.
+        """
+        tickers_str = ",".join(f"'{ticker}'" for ticker in tickers)
+        
+        # Connect to WRDS (using CRSP Q library)
+        db = wrds.Connection(USER_NAME=self.WRDS_USERNAME)
+        
+        query = f"""
+        SELECT a.date, b.ticker, a.prc, a.ret, a.vwretd
+        FROM crspq.dsf as a
+        JOIN crspq.dsenames as b
+        ON a.permno = b.permno
+        WHERE b.ticker IN ({tickers_str})
+        AND a.date BETWEEN '{start_date}' AND '{end_date}'
+        AND a.date BETWEEN b.namedt AND COALESCE(b.nameendt, '{end_date}')
+        ORDER BY a.date, b.ticker
+        """
+        
+        df = db.raw_sql(query)
+        db.close()
+        
+        # Compute dividend yield (if price is nonzero)
+        # df['dividend_yield'] = df.apply(lambda row: row['divamt'] / abs(row['prc']) if row['prc'] != 0 else 0, axis=1)
+        
+        # Compute full return:
+        # If vwretd is available (and non-null), use it; otherwise, add the dividend yield to the price return.
+        df['full_return'] = df.apply(
+            lambda row: row['vwretd'] if pd.notnull(row['vwretd']) else row['ret'],
+            axis=1
+        )
+        
+        # Pivot the data so that the index is date and the columns are ticker names.
+        df_full_return = df.pivot(index='date', columns='ticker', values='full_return')
+        df_full_return.index = pd.to_datetime(df_full_return.index)
+        df_full_return.fillna(0, inplace=True)
+        
+        return df_full_return
+
 
     def collect_data(self, start_date: str, end_date: str) -> pd.DataFrame:
         # Extract ETF tickers from the portfolio
@@ -183,7 +287,7 @@ class FixedIncomeDataCollector(DataCollector):
         
         # Get Treasury ETF data for the fixed income portfolio
         logger.info("Downloading Treasury ETF data...")
-        treasury_etf_data = self.get_etf_return(tickers, self.full_start_date, self.end_date)
+        treasury_etf_data = load_bond_etf_returns('./data/bond_etf.csv')
         if treasury_etf_data.empty:
             logger.warning("No Treasury ETF data collected.")
         else:
@@ -474,7 +578,7 @@ if __name__ == "__main__":
         portfolio=fixed_income_portfolio,
         full_start_date="2023-01-01",
         target_start_date="2023-11-01",
-        end_date="2024-12-31"
+        end_date="2025-12-31"
     )
     fixed_income_agent = FixedIncomeAgent(data_collector=fixed_income_data_collector, llm_client=client)
     

@@ -109,11 +109,11 @@ if __name__ == "__main__":
     logger.info(f"Tickers: {tickers}")
     
     # Define backtest period: Use two years of data, with the second year for rebalancing simulation.
-    full_start = "2024-01-01"
+    full_start = "2023-11-01"
     full_end = "2025-03-30"
     # For backtesting, we will update weekly during the second year.
-    backtest_start = "2024-01-01"
-    backtest_end = "2025-01-01"
+    backtest_start = "2024-11-01"
+    backtest_end = "2025-03-30"
     
     # Initialize DataCollector
     collector = DataCollector()

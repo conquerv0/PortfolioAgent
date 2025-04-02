@@ -84,11 +84,11 @@ PORTFOLIOS = {
     # G5 currencies
     "fx": {
         "currencies": [
-            {"name": "EUR/USD", "etf": "FXE", "weight": 0.0},
-            {"name": "GBP/USD", "etf": "FXB", "weight": 0.0},
-            {"name": "USD/JPY", "etf": "FXY", "weight": 0.0},
-            {"name": "USD/CHF", "etf": "FXF", "weight": 0.0},
-            {"name": "USD/CAD", "etf": "FXC", "weight": 0.0},
+            {"name": "EUR/USD", "etf": "FXE", "weight": 0.2},
+            {"name": "GBP/USD", "etf": "FXB", "weight": 0.2},
+            {"name": "USD/JPY", "etf": "FXY", "weight": 0.2},
+            {"name": "USD/CHF", "etf": "FXF", "weight": 0.2},
+            {"name": "USD/CAD", "etf": "FXC", "weight": 0.2},
         ],
     }
 }

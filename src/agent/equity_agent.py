@@ -9,10 +9,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import *
-from dotenv import load_dotenv
-
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ 
 
 # ----------------------------
 # Equity-Specific Implementations

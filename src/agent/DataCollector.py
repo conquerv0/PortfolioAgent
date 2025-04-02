@@ -170,9 +170,9 @@ if __name__ == "__main__":
     start_date = "2023-01-01"
     end_date = "2023-12-31"
     
-    collector = DataCollector()
+    collector = DataCollector(start_date, start_date, end_date)
     # Here, one would subclass DataCollector to implement collect_data; however, for covariance estimation we use download_etf_full_data.
-    price_data = collector.get_etf_full_data(tickers, start_date, end_date)
+    price_data = collector.get_etf_adj(tickers, start_date, end_date)
     cov_matrix = collector.estimate_covariance_matrix(price_data, method="ledoit_wolf")
     
     print("Estimated Covariance Matrix:")
