@@ -20,9 +20,6 @@ var/
 .installed.cfg
 *.egg
 
-# Configuration files with API keys
-config.py
-
 # Data files
 data/
 playground.ipynb
@@ -38,4 +35,6 @@ ENV/
 .vscode/
 *.swp
 *.swo 
+
+# Test Functions
 codes/fx_ensemble_prediction.py
