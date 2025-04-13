@@ -426,7 +426,7 @@ class FixedIncomeAgent(PortfolioAgent):
         """
         try:
             response = client.chat.completions.create(
-                model="gpt-4o-mini",  # Using GPT-4o mini
+                model="gpt-4o",  # Using GPT-4o mini
                 messages=[
                     {"role": "system", "content": "You are a fixed income market expert. Provide yield change predictions based on macroeconomic, treasury, and risk sentiment data."},
                     {"role": "user", "content": prompt}
