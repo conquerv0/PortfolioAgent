@@ -33,12 +33,12 @@ PREDICTION_SCHEMA = {
     "schema": {
         "type": "object",
         "properties": {
-            "currency_pairs": {
+            "instruments": {
                 "type": "array",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "pair": {
+                        "instrument": {
                             "type": "string",
                             "enum": ["EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "USD/CAD"],
                             "description": "The currency pair"
@@ -56,7 +56,7 @@ PREDICTION_SCHEMA = {
                             "description": "Brief reasoning for this specific currency pair"
                         }
                     },
-                    "required": ["pair", "predicted_return", "confidence", "rationale"],
+                    "required": ["instrument", "predicted_return", "confidence", "rationale"],
                     "additionalProperties": False
                 }
             },
@@ -65,7 +65,7 @@ PREDICTION_SCHEMA = {
                 "description": "Overall market analysis and cross-currency factors"
             }
         },
-        "required": ["currency_pairs", "overall_analysis"],
+        "required": ["instruments", "overall_analysis"],
         "additionalProperties": False
     },
     "strict": True
@@ -357,12 +357,12 @@ class FXAgent(PortfolioAgent):
             print(f"Error getting prediction: {e}")
             # Return a structured error response
             return {
-                "currency_pairs": [
-                    {"pair": "EUR/USD", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"pair": "GBP/USD", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"pair": "USD/JPY", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"pair": "USD/CHF", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"pair": "USD/CAD", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"}
+                "instruments": [
+                    {"instrument": "EUR/USD", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "GBP/USD", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "USD/JPY", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "USD/CHF", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "USD/CAD", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"}
                 ],
                 "overall_analysis": f"Failed to generate predictions due to error: {str(e)}"
             }
@@ -402,7 +402,7 @@ class FXAgent(PortfolioAgent):
                 processed_data = {
                     'date': [],
                     'etf': [],  # New ETF column
-                    'currency_pair': [],
+                    'instrument': [],
                     'predicted_return': [],
                     'confidence': [],
                     'rationale': [],
@@ -422,14 +422,14 @@ class FXAgent(PortfolioAgent):
                     pred_date = dates[j]
                     overall = pred.get('overall_analysis', '')
                     
-                    for pair_data in pred.get('currency_pairs', []):
-                        pair = pair_data.get('pair', '')
+                    for inst_data in pred.get('instruments', []):
+                        instrument = inst_data.get('instrument', '')
                         processed_data['date'].append(pred_date)
-                        processed_data['etf'].append(pair_to_etf.get(pair, ""))  # Add the corresponding ETF
-                        processed_data['currency_pair'].append(pair)
-                        processed_data['predicted_return'].append(pair_data.get('predicted_return'))
-                        processed_data['confidence'].append(pair_data.get('confidence'))
-                        processed_data['rationale'].append(pair_data.get('rationale', ''))
+                        processed_data['etf'].append(pair_to_etf.get(instrument, ""))  # Add the corresponding ETF
+                        processed_data['instrument'].append(instrument)
+                        processed_data['predicted_return'].append(inst_data.get('predicted_return'))
+                        processed_data['confidence'].append(inst_data.get('confidence'))
+                        processed_data['rationale'].append(inst_data.get('rationale', ''))
                         processed_data['overall_analysis'].append(overall)
                 
                 # Create DataFrame and save
@@ -441,7 +441,7 @@ class FXAgent(PortfolioAgent):
         processed_data = {
             'date': [],
             'etf': [],  # New ETF column
-            'currency_pair': [],
+            'instrument': [],
             'predicted_return': [],
             'confidence': [],
             'rationale': [],
@@ -461,14 +461,14 @@ class FXAgent(PortfolioAgent):
             pred_date = dates[j]
             overall = pred.get('overall_analysis', '')
             
-            for pair_data in pred.get('currency_pairs', []):
-                pair = pair_data.get('pair', '')
+            for inst_data in pred.get('instruments', []):
+                instrument = inst_data.get('instrument', '')
                 processed_data['date'].append(pred_date)
-                processed_data['etf'].append(pair_to_etf.get(pair, ""))  # Add the corresponding ETF
-                processed_data['currency_pair'].append(pair)
-                processed_data['predicted_return'].append(pair_data.get('predicted_return'))
-                processed_data['confidence'].append(pair_data.get('confidence'))
-                processed_data['rationale'].append(pair_data.get('rationale', ''))
+                processed_data['etf'].append(pair_to_etf.get(instrument, ""))  # Add the corresponding ETF
+                processed_data['instrument'].append(instrument)
+                processed_data['predicted_return'].append(inst_data.get('predicted_return'))
+                processed_data['confidence'].append(inst_data.get('confidence'))
+                processed_data['rationale'].append(inst_data.get('rationale', ''))
                 processed_data['overall_analysis'].append(overall)
         
         # Create final DataFrame
@@ -493,12 +493,12 @@ if __name__ == "__main__":
         portfolio=fx_portfolio,
         full_start_date="2020-01-01", 
         target_start_date="2023-11-01", 
-        end_date="2025-02-28")
+        end_date="2025-03-31")
     
     fx_agent = FXAgent(data_collector=fx_data_collector, llm_client=client)
     
     start_date = "2023-11-01"
-    end_date = "2025-02-28"
+    end_date = "2025-03-31"
     
     result_df = fx_agent.run_pipeline(start_date, end_date)
     print("FX Agent Predictions:")
