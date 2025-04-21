@@ -11,6 +11,7 @@ from openai import OpenAI
 from PortfolioAgent import *
 from DataCollector import *
 import logging
+import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,6 +48,10 @@ PREDICTION_SCHEMA = {
                             "type": "number",
                             "description": "Predicted return for the currency pair (as a decimal)"
                         },
+                        "predicted_volatility": {
+                            "type": "number",
+                            "description": "Predicted volatility for the currency pair (as a decimal)"
+                        },
                         "confidence": {
                             "type": "number",
                             "description": "Confidence level in the prediction (0-1)"
@@ -56,7 +61,7 @@ PREDICTION_SCHEMA = {
                             "description": "Brief reasoning for this specific currency pair"
                         }
                     },
-                    "required": ["instrument", "predicted_return", "confidence", "rationale"],
+                    "required": ["instrument", "predicted_return", "predicted_volatility", "confidence", "rationale"],
                     "additionalProperties": False
                 }
             },
@@ -70,6 +75,7 @@ PREDICTION_SCHEMA = {
     },
     "strict": True
 }
+
 # ----------------------------
 # FX Data Collector Functions 
 # ----------------------------
@@ -89,6 +95,34 @@ def get_momentum_factors(df):
         momentum_data[f'{ticker}_mom_12m'] = series.pct_change(periods=252, fill_method=None)
     
     return momentum_data
+
+
+def get_ewma_factor(df, span=21):
+    """
+    Calculate Exponentially Weighted Moving Average of returns for each currency
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        DataFrame containing price data for currencies
+    span : int
+        Span parameter for EWMA (default: 21 days, roughly a trading month)
+        
+    Returns:
+    --------
+    pandas.DataFrame
+        DataFrame with EWMA values for each currency
+    """
+    ewma_data = pd.DataFrame(index=df.index)
+    
+    for ticker in df.columns:
+        # Calculate daily returns first
+        returns = df[ticker].pct_change()
+        # Calculate EWMA of returns
+        ewma_data[f'{ticker}_ewma_1m'] = returns.ewm(span=span).mean()
+        
+    return ewma_data
+
 
 def get_risk_sentiment_data(start_date='2020-01-01', end_date='2025-03-31'):
     """Get risk sentiment data"""
@@ -125,12 +159,12 @@ def get_interest_rates(start_date='2020-01-01', end_date='2025-03-31'):
     try:
         # Define file paths and column mappings for major countries
         rate_files = {
-            'US_T10Y': 'data/Investing Government Bond Yield Data/United States 10-Year Bond Yield Historical Data.csv',
-            'GBP_T10Y': 'data/Investing Government Bond Yield Data/United Kingdom 10-Year Bond Yield Historical Data.csv',
-            'JPY_T10Y': 'data/Investing Government Bond Yield Data/Japan 10-Year Bond Yield Historical Data.csv',
-            'EUR_T10Y': 'data/Investing Government Bond Yield Data/Germany 10-Year Bond Yield Historical Data.csv',
-            'CHF_T10Y': 'data/Investing Government Bond Yield Data/Switzerland 10-Year Bond Yield Historical Data.csv',
-            'CAD_T10Y': 'data/Investing Government Bond Yield Data/Canada 10-Year Bond Yield Historical Data.csv'
+            'US_T10Y': 'data/Government Bond Yield Data/United States 10-Year Bond Yield Historical Data.csv',
+            'GBP_T10Y': 'data/Government Bond Yield Data/United Kingdom 10-Year Bond Yield Historical Data.csv',
+            'JPY_T10Y': 'data/Government Bond Yield Data/Japan 10-Year Bond Yield Historical Data.csv',
+            'EUR_T10Y': 'data/Government Bond Yield Data/Germany 10-Year Bond Yield Historical Data.csv',
+            'CHF_T10Y': 'data/Government Bond Yield Data/Switzerland 10-Year Bond Yield Historical Data.csv',
+            'CAD_T10Y': 'data/Government Bond Yield Data/Canada 10-Year Bond Yield Historical Data.csv'
         }
         
         rates_data = pd.DataFrame()
@@ -178,6 +212,37 @@ def get_interest_rates(start_date='2020-01-01', end_date='2025-03-31'):
         print(f"Error processing interest rates data: {e}")
         return pd.DataFrame()
 
+
+def calculate_historical_volatility(df, windows=[21, 63, 126]):
+    """
+    Calculate historical volatility using rolling standard deviation of returns
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        DataFrame containing price data for currencies
+    windows : list
+        List of rolling window sizes (default: [21, 63, 126] for 1m, 3m, 6m)
+        
+    Returns:
+    --------
+    pandas.DataFrame
+        DataFrame with volatility values for each currency and window
+    """
+    vol_data = pd.DataFrame(index=df.index)
+    
+    for ticker in df.columns:
+        # Calculate daily returns
+        returns = df[ticker].pct_change().dropna()
+        
+        # Calculate rolling volatility for each window
+        window_to_month = {21: "1m", 63: "3m", 126: "6m"}
+        for window in windows:
+            # Annualize the volatility (sqrt(252) is the annualization factor for daily data)
+            vol_data[f'{ticker}_vol_{window_to_month[window]}'] = returns.rolling(window=window).std() * np.sqrt(252)
+    
+    return vol_data
+
 # ----------------------------
 # FX-Specific Implementations
 # ----------------------------
@@ -191,21 +256,31 @@ class FXDataCollector(DataCollector):
     Combines these into a single DataFrame for the target period.
     """
     def __init__(self, portfolio: dict, full_start_date: str = '2020-01-01', target_start_date: str = '2023-11-01', end_date: str = '2025-02-28'):
-        self.portfolio = portfolio,
+        self.portfolio = portfolio
         self.full_start_date = full_start_date
         self.target_start_date = target_start_date
         self.end_date = end_date
     
     def collect_data(self, start_date: str, end_date: str) -> pd.DataFrame:
-        tickers = [entry["etf"] for entry in self.portfolio['bonds'].get("treasuries", [])]
+        tickers = [entry["etf"] for entry in self.portfolio]
         logger.info("Starting fixed income data collection...")
         etf_data = self.get_etf_data(tickers, self.full_start_date, self.end_date)
         print(f"Collected ETF data with shape: {etf_data.shape}")
             
-            # Calculate momentum factors
+        # Calculate momentum factors
         print("\nCalculating momentum factors...")
         data_with_momentum = get_momentum_factors(etf_data)
         print(f"Added momentum factors. Shape: {data_with_momentum.shape}")
+        
+        # Calculate EWMA for ETF returns
+        print("\nCalculating EWMA of returns...")
+        ewma_data = get_ewma_factor(etf_data)
+        print(f"Added EWMA data. Shape: {ewma_data.shape}")
+        
+        # Calculate historical volatility
+        print("\nCalculating historical volatility...")
+        vol_data = calculate_historical_volatility(etf_data)
+        print(f"Added volatility data. Shape: {vol_data.shape}")
         
         # Get risk sentiment data
         print("\nCollecting risk sentiment data...")
@@ -225,6 +300,8 @@ class FXDataCollector(DataCollector):
         print("\nCombining all data...")
         combined_data = pd.concat([
             data_with_momentum,
+            ewma_data,
+            vol_data,
             risk_data,
             rates_data
         ], axis=1)
@@ -285,14 +362,19 @@ class FXAgent(PortfolioAgent):
     def prepare_prompt(self, row: pd.Series) -> str:
         # Build a detailed prompt that includes all the necessary market data.
         prompt = """
-        Based on the following weekly financial market data, predict the next week's returns for the major currency pairs.
+        Based on the following weekly financial market data, predict the next week's returns and volatility for the major currency pairs.
         This week's market data:
         1. Currency ETFs:
-        - Euro (FXE): {FXE:.4f} (mom_1m: {FXE_mom_1m:.4f}, mom_3m: {FXE_mom_3m:.4f}, mom_12m: {FXE_mom_12m:.4f})
-        - British Pound (FXB): {FXB:.4f} (mom_1m: {FXB_mom_1m:.4f}, mom_3m: {FXB_mom_3m:.4f}, mom_12m: {FXB_mom_12m:.4f})
-        - Japanese Yen (FXY): {FXY:.4f} (mom_1m: {FXY_mom_1m:.4f}, mom_3m: {FXY_mom_3m:.4f}, mom_12m: {FXY_mom_12m:.4f})
-        - Swiss Franc (FXF): {FXF:.4f} (mom_1m: {FXF_mom_1m:.4f}, mom_3m: {FXF_mom_3m:.4f}, mom_12m: {FXF_mom_12m:.4f})
-        - Canadian Dollar (FXC): {FXC:.4f} (mom_1m: {FXC_mom_1m:.4f}, mom_3m: {FXC_mom_3m:.4f}, mom_12m: {FXC_mom_12m:.4f})
+        - Euro (FXE): {FXE:.4f} (mom_1m: {FXE_mom_1m:.4f}, mom_3m: {FXE_mom_3m:.4f}, mom_12m: {FXE_mom_12m:.4f}, ewma_1m: {FXE_ewma_1m:.4f})
+          Historical Vol: 1m: {FXE_vol_1m:.4f}, 3m: {FXE_vol_3m:.4f}, 6m: {FXE_vol_6m:.4f}
+        - British Pound (FXB): {FXB:.4f} (mom_1m: {FXB_mom_1m:.4f}, mom_3m: {FXB_mom_3m:.4f}, mom_12m: {FXB_mom_12m:.4f}, ewma_1m: {FXB_ewma_1m:.4f})
+          Historical Vol: 1m: {FXB_vol_1m:.4f}, 3m: {FXB_vol_3m:.4f}, 6m: {FXB_vol_6m:.4f}
+        - Japanese Yen (FXY): {FXY:.4f} (mom_1m: {FXY_mom_1m:.4f}, mom_3m: {FXY_mom_3m:.4f}, mom_12m: {FXY_mom_12m:.4f}, ewma_1m: {FXY_ewma_1m:.4f})
+          Historical Vol: 1m: {FXY_vol_1m:.4f}, 3m: {FXY_vol_3m:.4f}, 6m: {FXY_vol_6m:.4f}
+        - Swiss Franc (FXF): {FXF:.4f} (mom_1m: {FXF_mom_1m:.4f}, mom_3m: {FXF_mom_3m:.4f}, mom_12m: {FXF_mom_12m:.4f}, ewma_1m: {FXF_ewma_1m:.4f})
+          Historical Vol: 1m: {FXF_vol_1m:.4f}, 3m: {FXF_vol_3m:.4f}, 6m: {FXF_vol_6m:.4f}
+        - Canadian Dollar (FXC): {FXC:.4f} (mom_1m: {FXC_mom_1m:.4f}, mom_3m: {FXC_mom_3m:.4f}, mom_12m: {FXC_mom_12m:.4f}, ewma_1m: {FXC_ewma_1m:.4f})
+          Historical Vol: 1m: {FXC_vol_1m:.4f}, 3m: {FXC_vol_3m:.4f}, 6m: {FXC_vol_6m:.4f}
 
         2. Interest Rates and Changes:
         - US 10Y: {US_T10Y:.2f}% (Weekly Δ: {US_T10Y_weekly_change:.3f}%)
@@ -322,11 +404,19 @@ class FXAgent(PortfolioAgent):
             print(f"Warning: Missing data for key {e}. Using default values.")
             # Create a copy with missing values filled
             row_copy = row.copy()
-            for col in ['FXE_mom_1m', 'FXE_mom_3m', 'FXE_mom_12m', 'FXB_mom_1m', 'FXB_mom_3m', 'FXB_mom_12m',
-                    'FXY_mom_1m', 'FXY_mom_3m', 'FXY_mom_12m', 'FXF_mom_1m', 'FXF_mom_3m', 'FXF_mom_12m',
-                    'FXC_mom_1m', 'FXC_mom_3m', 'FXC_mom_12m', 'US_T10Y_weekly_change', 'EUR_T10Y_weekly_change',
-                    'GBP_T10Y_weekly_change', 'JPY_T10Y_weekly_change', 'CHF_T10Y_weekly_change', 'CAD_T10Y_weekly_change',
-                    'VIX_weekly_change', 'MOVE_weekly_change']:
+            for col in ['FXE_mom_1m', 'FXE_mom_3m', 'FXE_mom_12m', 'FXE_ewma_1m',
+                        'FXE_vol_1m', 'FXE_vol_3m', 'FXE_vol_6m',
+                        'FXB_mom_1m', 'FXB_mom_3m', 'FXB_mom_12m', 'FXB_ewma_1m',
+                        'FXB_vol_1m', 'FXB_vol_3m', 'FXB_vol_6m',
+                        'FXY_mom_1m', 'FXY_mom_3m', 'FXY_mom_12m', 'FXY_ewma_1m',
+                        'FXY_vol_1m', 'FXY_vol_3m', 'FXY_vol_6m',
+                        'FXF_mom_1m', 'FXF_mom_3m', 'FXF_mom_12m', 'FXF_ewma_1m',
+                        'FXF_vol_1m', 'FXF_vol_3m', 'FXF_vol_6m',
+                        'FXC_mom_1m', 'FXC_mom_3m', 'FXC_mom_12m', 'FXC_ewma_1m',
+                        'FXC_vol_1m', 'FXC_vol_3m', 'FXC_vol_6m',
+                        'US_T10Y_weekly_change', 'EUR_T10Y_weekly_change',
+                        'GBP_T10Y_weekly_change', 'JPY_T10Y_weekly_change', 'CHF_T10Y_weekly_change', 'CAD_T10Y_weekly_change',
+                        'VIX_weekly_change', 'MOVE_weekly_change']:
                 if col not in row_copy or pd.isna(row_copy[col]):
                     row_copy[col] = 0.0
             formatted_prompt = prompt.format(**row_copy.to_dict())
@@ -358,11 +448,11 @@ class FXAgent(PortfolioAgent):
             # Return a structured error response
             return {
                 "instruments": [
-                    {"instrument": "EUR/USD", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"instrument": "GBP/USD", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"instrument": "USD/JPY", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"instrument": "USD/CHF", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
-                    {"instrument": "USD/CAD", "predicted_return": None, "confidence": 0, "rationale": f"Error: {str(e)}"}
+                    {"instrument": "EUR/USD", "predicted_return": None, "predicted_volatility": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "GBP/USD", "predicted_return": None, "predicted_volatility": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "USD/JPY", "predicted_return": None, "predicted_volatility": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "USD/CHF", "predicted_return": None, "predicted_volatility": None, "confidence": 0, "rationale": f"Error: {str(e)}"},
+                    {"instrument": "USD/CAD", "predicted_return": None, "predicted_volatility": None, "confidence": 0, "rationale": f"Error: {str(e)}"}
                 ],
                 "overall_analysis": f"Failed to generate predictions due to error: {str(e)}"
             }
@@ -373,7 +463,8 @@ class FXAgent(PortfolioAgent):
             data = pd.read_csv('data/fx_combined_features_weekly.csv', index_col=0)
             data.index = pd.to_datetime(data.index)
         else:
-            self.data_collector.collect_data(start_date, end_date)
+            data = self.data_collector.collect_data(start_date, end_date)
+        
         # Initialize list to store predictions
         predictions = []
         dates = []
@@ -401,9 +492,10 @@ class FXAgent(PortfolioAgent):
                 # Process and save the predictions in a more analysis-friendly format
                 processed_data = {
                     'date': [],
-                    'etf': [],  # New ETF column
+                    'etf': [],  
                     'instrument': [],
                     'predicted_return': [],
+                    'predicted_volatility': [],
                     'confidence': [],
                     'rationale': [],
                     'overall_analysis': []
@@ -425,9 +517,10 @@ class FXAgent(PortfolioAgent):
                     for inst_data in pred.get('instruments', []):
                         instrument = inst_data.get('instrument', '')
                         processed_data['date'].append(pred_date)
-                        processed_data['etf'].append(pair_to_etf.get(instrument, ""))  # Add the corresponding ETF
+                        processed_data['etf'].append(pair_to_etf.get(instrument, ""))  
                         processed_data['instrument'].append(instrument)
                         processed_data['predicted_return'].append(inst_data.get('predicted_return'))
+                        processed_data['predicted_volatility'].append(inst_data.get('predicted_volatility'))
                         processed_data['confidence'].append(inst_data.get('confidence'))
                         processed_data['rationale'].append(inst_data.get('rationale', ''))
                         processed_data['overall_analysis'].append(overall)
@@ -440,9 +533,10 @@ class FXAgent(PortfolioAgent):
         # Process all predictions for final output
         processed_data = {
             'date': [],
-            'etf': [],  # New ETF column
+            'etf': [],  
             'instrument': [],
             'predicted_return': [],
+            'predicted_volatility': [],
             'confidence': [],
             'rationale': [],
             'overall_analysis': []
@@ -464,9 +558,10 @@ class FXAgent(PortfolioAgent):
             for inst_data in pred.get('instruments', []):
                 instrument = inst_data.get('instrument', '')
                 processed_data['date'].append(pred_date)
-                processed_data['etf'].append(pair_to_etf.get(instrument, ""))  # Add the corresponding ETF
+                processed_data['etf'].append(pair_to_etf.get(instrument, ""))  
                 processed_data['instrument'].append(instrument)
                 processed_data['predicted_return'].append(inst_data.get('predicted_return'))
+                processed_data['predicted_volatility'].append(inst_data.get('predicted_volatility'))
                 processed_data['confidence'].append(inst_data.get('confidence'))
                 processed_data['rationale'].append(inst_data.get('rationale', ''))
                 processed_data['overall_analysis'].append(overall)
