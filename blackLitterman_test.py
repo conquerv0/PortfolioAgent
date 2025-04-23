@@ -196,7 +196,8 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
         
         # Update expected returns via BL
         updated_returns = black_litterman_update(pi, Sigma, q, confidences)
-        bl_weights = mean_variance_portfolio(Sigma, updated_returns, risk_aversion=RISK_AVERSION)
+        bl_weights = max_sharpe_portfolio(Sigma, updated_returns, risk_free_rate=RISK_FREE_RATE)
+        # bl_weights = mean_variance_portfolio(Sigma, updated_returns, risk_aversion=RISK_AVERSION)
         weights_history.append(bl_weights.flatten())
         
         n = len(asset_list)
@@ -317,7 +318,7 @@ def plot_cumulative_returns(results_df, asset_class):
 # Main function
 def main():
     # Change asset_class to "fx" or "fi" as needed
-    asset_class = "fx"  # or "fi" for fixed income
+    asset_class = "fi"  # or "fi" for fixed income
     predictions, actual_data = load_data(asset_class=asset_class)
     
     if asset_class == "fx":
