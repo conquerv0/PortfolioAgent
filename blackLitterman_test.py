@@ -27,15 +27,16 @@ from src.config.settings import PORTFOLIOS  # expects PORTFOLIOS to have 'fx' an
 # Define asset lists from settings
 fx_tickers = [entry["etf"] for entry in PORTFOLIOS['fx'].get("currencies", [])]
 fi_tickers = [entry["etf"] for entry in PORTFOLIOS['bond'].get("treasuries", [])]
-
+equity_tickers = [entry["etf"] for entry in PORTFOLIOS["equity"]["sectors"]]
+commodity_tickers = [entry["etf"] for entry in PORTFOLIOS["commodity"]["sectors"]]
 # -----------------------------------------------
 # Data loading function
 def load_data(asset_class="fx"):
     """
     Load prediction and actual data files.
-    For FX:
-      - Prediction file: data/fx_weekly_predictions.csv (with columns: date, etf, predicted_return, confidence)
-      - Actual file: data/fx_combined_features_weekly.csv (price data; we compute returns from prices)
+    For FX, equity, commodity:
+      - Prediction file: data/{asset_class}_weekly_predictions.csv (with columns: date, etf, predicted_return, confidence)
+      - Actual file: data/{asset_class}_combined_features_weekly.csv (price data; we compute returns from prices)
     
     For fixed income ("fi"):
       - Prediction file: data/fi_weekly_predictions.csv (with columns: date, etf, predicted_return, confidence)
@@ -44,14 +45,12 @@ def load_data(asset_class="fx"):
     Returns:
       predictions, actual_data
     """
-    if asset_class == "fx":
-        pred_file = 'data/fx_weekly_predictions.csv'
-        actual_file = 'data/fx_combined_features_weekly.csv'
-    elif asset_class == "fi":
-        pred_file = 'data/fi_weekly_predictions.csv'
-        actual_file = 'data/fi_combined_features_weekly.csv'
-    else:
-        raise ValueError("asset_class must be 'fx' or 'fi'")
+    asset_class = asset_class.lower()
+    try:
+        pred_file   = f"data/{asset_class}_weekly_predictions.csv"
+        actual_file = f"data/{asset_class}_combined_features_weekly.csv"
+    except:
+        raise ValueError("asset_class must be 'fx', 'fi', 'equity', or 'commodity'!")
     
     print("Loading prediction data...")
     predictions = pd.read_csv(pred_file)
@@ -112,7 +111,7 @@ def robust_covariance_estimation(tickers, robust_start_date, end_date):
     
     Parameters:
       tickers: list of tickers (for FX or FI)
-      robust_start_date: starting date for robust estimation (e.g., "2015-01-01")
+      robust_start_date: starting date for robust estimation 
       end_date: end date (current prediction date)
       
     Returns:
@@ -138,7 +137,7 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
     """
     Perform a rolling backtest.
     For each prediction date (week) where at least 'lookback_weeks' of historical actual data is available:
-      - For FX: compute weekly returns from price data using pct_change.
+      - For FX, equity, commodity: compute weekly returns from price data using pct_change.
       - For FI: assume the actual data already provides the weekly total volume-weighted return.
     Then use these historical returns to compute baseline expected returns (pi) and covariance (Sigma),
     update expected returns with the BL formula using the prediction (q) and confidence scores,
@@ -166,14 +165,12 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
             continue
         
         lookback_data = hist_data.tail(lookback_weeks)
-        if asset_class == "fx":
-            # For FX: compute returns from prices
-            returns_lookback = lookback_data[asset_list].pct_change().dropna()
-        elif asset_class == "fi":
+        if asset_class == "fi":
             # For FI: assume columns already contain weekly returns
             returns_lookback = lookback_data[asset_list].dropna()
         else:
-            raise ValueError("asset_class must be 'fx' or 'fi'")
+            # For FX, equity, commodity: compute returns from prices
+            returns_lookback = lookback_data[asset_list].pct_change().dropna()
         
         if returns_lookback.empty:
             continue
@@ -214,8 +211,12 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
         if current_row.empty or future_row.empty:
             continue
         
-        if asset_class == "fx":
-            # Compute returns from prices: (price_next / price_current - 1)
+        if asset_class == "fi":
+            # For fixed income, assume the actual data already provides the weekly return
+            next_returns = future_row[asset_list].iloc[0].values
+            next_returns = np.array(next_returns)
+        else:
+            # For FX, equity, commodity: Compute returns from prices: (price_next / price_current - 1)
             next_returns = []
             for asset in asset_list:
                 try:
@@ -226,10 +227,7 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
                     ret = 0
                 next_returns.append(ret)
             next_returns = np.array(next_returns)
-        elif asset_class == "fi":
-            # For fixed income, assume the actual data already provides the weekly return
-            next_returns = future_row[asset_list].iloc[0].values
-            next_returns = np.array(next_returns)
+            
         next_returns = np.clip(next_returns, -0.5, 0.5)
         
         bl_port_return = float(bl_weights.T @ next_returns.reshape(-1, 1))
@@ -317,14 +315,20 @@ def plot_cumulative_returns(results_df, asset_class):
 # -----------------------------------------------
 # Main function
 def main():
-    # Change asset_class to "fx" or "fi" as needed
-    asset_class = "fi"  # or "fi" for fixed income
+    # Change asset_class to "fx", "fi", "equity", or "commodity" as needed
+    asset_class = "equity"  # or "fi", "equity", "commodity" for other asset classes
     predictions, actual_data = load_data(asset_class=asset_class)
     
     if asset_class == "fx":
         assets = fx_tickers
-    else:
+    elif asset_class == "fi":
         assets = fi_tickers
+    elif asset_class == "equity":
+        assets = equity_tickers
+    elif asset_class == "commodity":
+        assets = commodity_tickers
+    else:
+        raise ValueError("Unsupported asset class")
     
     results_df, weights_history = rolling_bl_backtest(predictions, actual_data, assets, asset_class=asset_class, lookback_weeks=LOOKBACK_WEEKS)
     if results_df.empty:

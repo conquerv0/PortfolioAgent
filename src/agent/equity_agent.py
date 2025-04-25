@@ -41,11 +41,20 @@ PREDICTION_SCHEMA = {
                         "instrument": {
                             "type": "string",
                             "enum": [
-                                "XLK", "XLV", "XLF", "XLY", "XLC",
-                                "XLI", "XLP", "XLE", "XLU", "XLRE", "XLB"
+                                "Information Technology",
+                                "Health Care",
+                                "Financials",
+                                "Consumer Discretionary",
+                                "Communication Services",
+                                "Industrials",
+                                "Consumer Staples",
+                                "Energy",
+                                "Utilities",
+                                "Real Estate",
+                                "Materials"
                             ],
-                            "description": "Sector ETF ticker"
-                        },
+                            "description": "GICS sector name"
+                            },
                         "predicted_return": {
                             "type": "number",
                             "description": "Predicted 1-week total return (decimal)"
@@ -278,13 +287,13 @@ class EquityAgent(PortfolioAgent):
         """
         try:
             response = client.chat.completions.create(
-                model="gpt-4o",                                   # GPT-4o
+                model="gpt-4o-mini",                                   # GPT-4o
                 messages=[
                     {
                         "role": "system",
                         "content": (
                             "You are an equity-sector strategist. Provide 1-week return forecasts for "
-                            "major GICS sector ETFs based on macro, risk-sentiment and price data."
+                            "major GICS sector ETFs based on macro, risk-sentiment, price data and some technical signal."
                         ),
                     },
                     {"role": "user", "content": prompt},
