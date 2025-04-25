@@ -134,6 +134,135 @@ class DataCollector:
             raise ValueError(f"Unknown method: {method}")
         return cov_matrix, close_prices, returns
     
+    def get_momentum_factors(self, df):
+        """
+        Calculate momentum factors for each ticker in the DataFrame.
+        
+        Parameters:
+        -----------
+        df : pandas.DataFrame
+            DataFrame containing price data for tickers
+            
+        Returns:
+        --------
+        pandas.DataFrame
+            DataFrame with momentum factors for each ticker
+        """
+        momentum_data = df.copy()
+        
+        # Calculate various momentum indicators
+        for ticker in df.columns:
+            # Fill NaN values before calculating momentum
+            series = df[ticker].ffill()
+            # 1-month momentum
+            momentum_data[f'{ticker}_mom_1m'] = series.pct_change(periods=21, fill_method=None)
+            # 3-month momentum
+            momentum_data[f'{ticker}_mom_3m'] = series.pct_change(periods=63, fill_method=None)
+            # 12-month momentum
+            momentum_data[f'{ticker}_mom_12m'] = series.pct_change(periods=252, fill_method=None)
+        
+        return momentum_data
+
+    def get_ewma_factor(self, df, span=21):
+        """
+        Calculate Exponentially Weighted Moving Average of returns for each ticker
+        
+        Parameters:
+        -----------
+        df : pandas.DataFrame
+            DataFrame containing price data for tickers
+        span : int
+            Span parameter for EWMA (default: 21 days, roughly a trading month)
+            
+        Returns:
+        --------
+        pandas.DataFrame
+            DataFrame with EWMA values for each ticker
+        """
+        ewma_data = pd.DataFrame(index=df.index)
+        
+        for ticker in df.columns:
+            # Calculate daily returns first
+            returns = df[ticker].pct_change()
+            # Calculate EWMA of returns
+            ewma_data[f'{ticker}_ewma_1m'] = returns.ewm(span=span).mean()
+            
+        return ewma_data
+
+    def calculate_historical_volatility(self, df, windows=[21, 63, 126]):
+        """
+        Calculate historical volatility using rolling standard deviation of returns
+        
+        Parameters:
+        -----------
+        df : pandas.DataFrame
+            DataFrame containing price data for tickers
+        windows : list
+            List of rolling window sizes (default: [21, 63, 126] for 1m, 3m, 6m)
+            
+        Returns:
+        --------
+        pandas.DataFrame
+            DataFrame with volatility values for each ticker and window
+        """
+        vol_data = pd.DataFrame(index=df.index)
+        
+        for ticker in df.columns:
+            # Calculate daily returns
+            returns = df[ticker].pct_change().dropna()
+            
+            # Calculate rolling volatility for each window
+            window_to_month = {21: "1m", 63: "3m", 126: "6m"}
+            for window in windows:
+                # Annualize the volatility (sqrt(252) is the annualization factor for daily data)
+                vol_data[f'{ticker}_vol_{window_to_month[window]}'] = returns.rolling(window=window).std() * np.sqrt(252)
+        
+        return vol_data
+
+    def get_risk_sentiment_data(self, start_date='2020-01-01', end_date='2025-03-31'):
+        """
+        Get risk sentiment data from market indices
+        
+        Parameters:
+        -----------
+        start_date : str
+            Start date in YYYY-MM-DD format
+        end_date : str
+            End date in YYYY-MM-DD format
+            
+        Returns:
+        --------
+        pandas.DataFrame
+            DataFrame with risk sentiment indicators
+        """
+        # Download market indices
+        indices = {
+            '^VIX': 'VIX',           # Volatility Index
+            '^MOVE': 'MOVE'          # ICE BofA MOVE Index
+        }
+        
+        risk_data = pd.DataFrame()
+        
+        for ticker, name in indices.items():
+            try:
+                logger.info(f"Downloading {ticker}...")
+                data = yf.download(ticker, start=start_date, end=end_date)['Close']
+                if data.empty:
+                    logger.warning(f"Warning: No data received for {ticker}")
+                    continue
+                risk_data[name] = data
+                logger.info(f"Successfully downloaded {ticker}")
+            except Exception as e:
+                logger.error(f"Error downloading {ticker}: {e}")
+                continue
+        
+        if risk_data.empty:
+            logger.warning("Warning: No risk sentiment data was collected")
+        else:
+            logger.info(f"Collected risk sentiment data with columns: {risk_data.columns.tolist()}")
+        
+        return risk_data
+    
 def extract_etf_tickers(portfolio: dict, key: str = "treasuries") -> list:
     """
     Extracts ETF tickers from a portfolio dictionary.

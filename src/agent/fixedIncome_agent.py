@@ -241,7 +241,6 @@ class FixedIncomeDataCollector(DataCollector):
         
         df = db.raw_sql(query)
         db.close()
-        
         # Compute dividend yield (if price is nonzero)
         # df['dividend_yield'] = df.apply(lambda row: row['divamt'] / abs(row['prc']) if row['prc'] != 0 else 0, axis=1)
         
@@ -327,7 +326,7 @@ class FixedIncomeDataCollector(DataCollector):
         
         # Calculate weekly changes for yield series and risk sentiment
         for col in required_yields:
-            weekly_data[f'{col}_weekly_change'] = weekly_data[col].pct_change()
+            weekly_data[f'{col}_weekly_change'] = weekly_data[col].pct_change().fillna(0)
         for sentiment in ["VIX", "MOVE"]:
             if sentiment in weekly_data.columns:
                 weekly_data[f'{sentiment}_weekly_change'] = weekly_data[sentiment].pct_change()
@@ -451,25 +450,6 @@ class FixedIncomeAgent(PortfolioAgent):
                 "overall_analysis": f"Failed to generate predictions due to error: {str(e)}"
             }
     
-
-    # def get_llm_analysis(self, prompt: str) -> dict:
-    #     try:
-    #         response = self.llm_client.chat.completions.create(
-    #             model="gpt-4o",
-    #             messages=[
-    #                 {"role": "system", "content": "You are a financial market expert specialized in fixed income analysis."},
-    #                 {"role": "user", "content": prompt}
-    #             ],
-    #             response_format={"type": "json_object", "schema": PREDICTION_SCHEMA, "strict": True},
-    #             temperature=0.7,
-    #             max_tokens=300
-    #         )
-    #         prediction_str = response.choices[0].message.content.strip()
-    #         prediction = json.loads(prediction_str)
-    #         return prediction
-    #     except Exception as e:
-    #         logger.error(f"Error getting LLM analysis: {e}")
-    #         return {"predicted_return": None, "confidence": None, "rationale": f"Error: {str(e)}"}
     def run_pipeline(self, start_date, end_date):
         print("Loading weekly fixed income data...")
         if os.path.exists('data/fi_combined_features_weekly.csv'):
@@ -536,22 +516,24 @@ class FixedIncomeAgent(PortfolioAgent):
             'etf': [],
             'instrument': [],
             'predicted_return': [],
-            'confidence': [],
-            'rationale': [],
-            'overall_analysis': []
+            'predicted_volatility': [],
+            "confidence": [],
+            "rationale": [],
+            "overall_analysis": [],
         }
         for j, pred in enumerate(predictions):
             pred_date = dates[j]
-            overall = pred.get('overall_analysis', '')
-            for inst in pred.get('instruments', []):
-                instrument = inst.get('instrument', '')
-                processed_data['date'].append(pred_date)
-                processed_data['etf'].append(instrument_to_etf.get(instrument, ""))
-                processed_data['instrument'].append(instrument)
-                processed_data['predicted_return'].append(inst.get('predicted_return'))
-                processed_data['confidence'].append(inst.get('confidence'))
-                processed_data['rationale'].append(inst.get('rationale', ''))
-                processed_data['overall_analysis'].append(overall)
+            overall = pred.get("overall_analysis", "")
+            for inst in pred.get("instruments", []):
+                instrument = inst.get("instrument", "")
+                processed_data["date"].append(pred_date)
+                processed_data["etf"].append(instrument_to_etf.get(instrument, ""))
+                processed_data["instrument"].append(instrument)
+                processed_data["predicted_return"].append(inst.get("predicted_return"))
+                processed_data["predicted_volatility"].append(inst.get("predicted_volatility"))
+                processed_data["confidence"].append(inst.get("confidence"))
+                processed_data["rationale"].append(inst.get("rationale", ""))
+                processed_data["overall_analysis"].append(overall)
         
         final_df = pd.DataFrame(processed_data)
         final_csv = 'data/fi_weekly_predictions.csv'

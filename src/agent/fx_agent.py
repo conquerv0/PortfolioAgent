@@ -79,81 +79,6 @@ PREDICTION_SCHEMA = {
 # ----------------------------
 # FX Data Collector Functions 
 # ----------------------------
-def get_momentum_factors(df):
-    """Calculate momentum factors"""
-    momentum_data = df.copy()
-    
-    # Calculate various momentum indicators
-    for ticker in df.columns:
-        # Fill NaN values before calculating momentum
-        series = df[ticker].ffill()
-        # 1-month momentum
-        momentum_data[f'{ticker}_mom_1m'] = series.pct_change(periods=21, fill_method=None)
-        # 3-month momentum
-        momentum_data[f'{ticker}_mom_3m'] = series.pct_change(periods=63, fill_method=None)
-        # 12-month momentum
-        momentum_data[f'{ticker}_mom_12m'] = series.pct_change(periods=252, fill_method=None)
-    
-    return momentum_data
-
-
-def get_ewma_factor(df, span=21):
-    """
-    Calculate Exponentially Weighted Moving Average of returns for each currency
-    
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        DataFrame containing price data for currencies
-    span : int
-        Span parameter for EWMA (default: 21 days, roughly a trading month)
-        
-    Returns:
-    --------
-    pandas.DataFrame
-        DataFrame with EWMA values for each currency
-    """
-    ewma_data = pd.DataFrame(index=df.index)
-    
-    for ticker in df.columns:
-        # Calculate daily returns first
-        returns = df[ticker].pct_change()
-        # Calculate EWMA of returns
-        ewma_data[f'{ticker}_ewma_1m'] = returns.ewm(span=span).mean()
-        
-    return ewma_data
-
-
-def get_risk_sentiment_data(start_date='2020-01-01', end_date='2025-03-31'):
-    """Get risk sentiment data"""
-    # Download market indices
-    indices = {
-        '^VIX': 'VIX',           # Volatility Index
-        '^MOVE': 'MOVE'          # ICE BofA MOVE Index
-    }
-    
-    risk_data = pd.DataFrame()
-    
-    for ticker, name in indices.items():
-        try:
-            print(f"Downloading {ticker}...")
-            data = yf.download(ticker, start=start_date, end=end_date)['Close']
-            if data.empty:
-                print(f"Warning: No data received for {ticker}")
-                continue
-            risk_data[name] = data
-            print(f"Successfully downloaded {ticker}")
-        except Exception as e:
-            print(f"Error downloading {ticker}: {e}")
-            continue
-    
-    if risk_data.empty:
-        print("Warning: No risk sentiment data was collected")
-    else:
-        print(f"Collected risk sentiment data with columns: {risk_data.columns.tolist()}")
-    
-    return risk_data
-
 def get_interest_rates(start_date='2020-01-01', end_date='2025-03-31'):
     """Get 10-year interest rates for major economies from local CSV files"""
     try:
@@ -212,37 +137,6 @@ def get_interest_rates(start_date='2020-01-01', end_date='2025-03-31'):
         print(f"Error processing interest rates data: {e}")
         return pd.DataFrame()
 
-
-def calculate_historical_volatility(df, windows=[21, 63, 126]):
-    """
-    Calculate historical volatility using rolling standard deviation of returns
-    
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        DataFrame containing price data for currencies
-    windows : list
-        List of rolling window sizes (default: [21, 63, 126] for 1m, 3m, 6m)
-        
-    Returns:
-    --------
-    pandas.DataFrame
-        DataFrame with volatility values for each currency and window
-    """
-    vol_data = pd.DataFrame(index=df.index)
-    
-    for ticker in df.columns:
-        # Calculate daily returns
-        returns = df[ticker].pct_change().dropna()
-        
-        # Calculate rolling volatility for each window
-        window_to_month = {21: "1m", 63: "3m", 126: "6m"}
-        for window in windows:
-            # Annualize the volatility (sqrt(252) is the annualization factor for daily data)
-            vol_data[f'{ticker}_vol_{window_to_month[window]}'] = returns.rolling(window=window).std() * np.sqrt(252)
-    
-    return vol_data
-
 # ----------------------------
 # FX-Specific Implementations
 # ----------------------------
@@ -256,10 +150,8 @@ class FXDataCollector(DataCollector):
     Combines these into a single DataFrame for the target period.
     """
     def __init__(self, portfolio: dict, full_start_date: str = '2020-01-01', target_start_date: str = '2023-11-01', end_date: str = '2025-02-28'):
+        super().__init__(full_start_date, target_start_date, end_date)
         self.portfolio = portfolio
-        self.full_start_date = full_start_date
-        self.target_start_date = target_start_date
-        self.end_date = end_date
     
     def collect_data(self, start_date: str, end_date: str) -> pd.DataFrame:
         tickers = [entry["etf"] for entry in self.portfolio]
@@ -269,22 +161,22 @@ class FXDataCollector(DataCollector):
             
         # Calculate momentum factors
         print("\nCalculating momentum factors...")
-        data_with_momentum = get_momentum_factors(etf_data)
+        data_with_momentum = self.get_momentum_factors(etf_data)
         print(f"Added momentum factors. Shape: {data_with_momentum.shape}")
         
         # Calculate EWMA for ETF returns
         print("\nCalculating EWMA of returns...")
-        ewma_data = get_ewma_factor(etf_data)
+        ewma_data = self.get_ewma_factor(etf_data)
         print(f"Added EWMA data. Shape: {ewma_data.shape}")
         
         # Calculate historical volatility
         print("\nCalculating historical volatility...")
-        vol_data = calculate_historical_volatility(etf_data)
+        vol_data = self.calculate_historical_volatility(etf_data)
         print(f"Added volatility data. Shape: {vol_data.shape}")
         
         # Get risk sentiment data
         print("\nCollecting risk sentiment data...")
-        risk_data = get_risk_sentiment_data(self.full_start_date, end_date)
+        risk_data = self.get_risk_sentiment_data(self.full_start_date, end_date)
         if risk_data.empty:
             print("Warning: No risk sentiment data collected")
         else:
