@@ -37,13 +37,24 @@ class PortfolioAgent:
         Empirical return estimation for each asset in the portfolio.
         For simplicity, we use the mean daily return computed from historical prices.
         """
-        raise NotImplementedError("Subclasses must implement collect_data.")
-        # returns = {}
-        # for asset, df in data.items():
-        #     # Compute daily percent change and average (simple empirical return)
-        #     daily_returns = df.pct_change().dropna()
-        #     returns[asset] = daily_returns.mean()
-        # return returns
+        # raise NotImplementedError("Subclasses must implement collect_data.")
+    def estimate_returns(self, price_panel: pd.DataFrame,
+                         span_weeks: int = 1) -> pd.DataFrame:
+        """
+        Compute a rolling EWMA return as the baseline forecast.
+        `price_panel` must be daily prices with tickers as columns.
+        Returns a DataFrame whose column names are '{TICKER}_baseline_ret'.
+        """
+        if price_panel.empty:
+            raise ValueError("price_panel is empty")
+
+        # convert span (weeks) → span (days)   (≈ 5 trading days / wk)
+        span = span_weeks * 5
+        ret = price_panel.pct_change()
+
+        baseline = ret.ewm(span=span).mean()
+        baseline.columns = [f"{c}_baseline_ret" for c in baseline.columns]
+        return baseline
     
     def get_llm_analysis(self, prompt: str) -> dict:
         """

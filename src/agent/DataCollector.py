@@ -155,6 +155,12 @@ class DataCollector:
             # Fill NaN values before calculating momentum
             series = df[ticker].ffill()
             # 1-month momentum
+            momentum_data[f'{ticker}_mom_1w'] = series.pct_change(periods=5, fill_method=None)
+            # 3-month momentum
+            momentum_data[f'{ticker}_mom_2w'] = series.pct_change(periods=10, fill_method=None)
+            # 12-month momentum
+            momentum_data[f'{ticker}_mom_3w'] = series.pct_change(periods=15, fill_method=None)
+            # 1-month momentum
             momentum_data[f'{ticker}_mom_1m'] = series.pct_change(periods=21, fill_method=None)
             # 3-month momentum
             momentum_data[f'{ticker}_mom_3m'] = series.pct_change(periods=63, fill_method=None)
@@ -185,6 +191,7 @@ class DataCollector:
             # Calculate daily returns first
             returns = df[ticker].pct_change()
             # Calculate EWMA of returns
+            ewma_data[f'{ticker}_ewma_1w'] = returns.ewm(span=5).mean()
             ewma_data[f'{ticker}_ewma_1m'] = returns.ewm(span=span).mean()
             
         return ewma_data

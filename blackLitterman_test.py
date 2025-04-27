@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 import pandas as pd
 import numpy as np
-from numpy.linalg import inv, eigvals
+from numpy.linalg import inv, eigvalsh   # h = Hermitian
 import matplotlib.pyplot as plt
 import os
 from src.agent.DataCollector import *
+from dateutil.relativedelta import relativedelta
 
 # ----- Global Parameters -----
-LOOKBACK_WEEKS = 10      # Use 5 years of weekly data (≈260 weeks)
-UNCERTAINTY_SCALE = 0.00   # Scaling factor for view uncertainty
+LOOKBACK_WEEKS = 10  
+ROBUST_LOOKBACK_WEEKS = 260     # ≈ 5 years  (adjust as you like)
+UNCERTAINTY_SCALE = 0.5   # Scaling factor for view uncertainty
 EPSILON = 1e-4           # Small constant to avoid division by zero
-TAU = 1              # Scaling parameter for the prior covariance in BL
+TAU = 0.2             # Scaling parameter for the prior covariance in BL
 RISK_AVERSION = 1       # Risk aversion parameter for mean-variance optimization
 RISK_FREE_RATE = 0.0
 
@@ -22,7 +24,7 @@ fx_instrument_to_etf = {
     "USD/CHF": "FXF",
     "USD/CAD": "FXC"
 }
-from src.config.settings import PORTFOLIOS  # expects PORTFOLIOS to have 'fx' and 'bond' keys
+from src.config.settings import PORTFOLIOS  
 
 # Define asset lists from settings
 fx_tickers = [entry["etf"] for entry in PORTFOLIOS['fx'].get("currencies", [])]
@@ -118,18 +120,20 @@ def robust_covariance_estimation(tickers, robust_start_date, end_date):
       Sigma: robust covariance matrix (numpy array)
       robust_pi: Baseline mean returns (column vector) over the robust period.
     """
-    collector = DataCollector(full_start_date=robust_start_date, target_start_date=robust_start_date, end_date=end_date)
-    price_data = collector.get_etf_adj_close(tickers, robust_start_date, end_date)
-    if price_data.empty:
+    collector  = DataCollector(full_start_date=robust_start_date,
+                               target_start_date=robust_start_date,
+                               end_date=end_date)
+    price = collector.get_etf_adj_close(tickers, robust_start_date, end_date)
+    if price.empty:
         raise ValueError("No price data downloaded for robust covariance estimation.")
-    cov_matrix, close_prices, returns = collector.estimate_covariance_matrix(price_data, method="ledoit_wolf")
-    robust_pi = returns.mean().values.reshape(-1, 1)
-    # Return covariance matrix as numpy array
-    if isinstance(cov_matrix, pd.DataFrame):
-        Sigma = cov_matrix.values
-    else:
-        Sigma = cov_matrix
-    return Sigma, robust_pi
+
+    # convert to WEEKLY returns before shrinkage
+    weekly_ret = price.resample("W-FRI").last().pct_change().dropna()
+
+    lw = LedoitWolf().fit(weekly_ret.values)
+    Sigma = lw.covariance_
+    pi    = weekly_ret.mean().values.reshape(-1,1)
+    return Sigma, pi
 
 # -----------------------------------------------
 # Rolling backtest pipeline
@@ -161,6 +165,7 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
     for current_date in pred_pivot.index:
         # Only use historical data strictly before current_date
         hist_data = actual_data[actual_data['date'] < current_date]
+        
         if len(hist_data) < lookback_weeks:
             continue
         
@@ -176,12 +181,31 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
             continue
         
         pi = returns_lookback.mean().values.reshape(-1, 1)
-        Sigma = returns_lookback.cov().values
-                
-        pi = returns_lookback.mean().values.reshape(-1, 1)
-        Sigma, pi = robust_covariance_estimation(asset_list, '2015-01-01', '2023-01-01')
-        if np.min(eigvals(Sigma)) < 0:
-            Sigma -= 10 * np.min(eigvals(Sigma)) * np.eye(*Sigma.shape)
+        # Sigma = returns_lookback.cov().values
+        # inside rolling_bl_backtest, before BL update
+        # rolling_bl_backtest, right after you create Sigma
+        Sigma_short = returns_lookback.cov().values
+        robust_start_date = (pd.to_datetime(current_date)
+                     - pd.Timedelta(weeks=ROBUST_LOOKBACK_WEEKS)).strftime("%Y-%m-%d")
+        Sigma_long, robust_pi = robust_covariance_estimation(
+                                    asset_list,
+                                    robust_start_date,
+                                    current_date.strftime("%Y-%m-%d"))
+        lambda_ = 0.7
+        Sigma = lambda_*Sigma_short + (1-lambda_)*Sigma_long         # or λ-blend of your choice
+
+        # >>> add safety lines here <<<
+        Sigma = np.nan_to_num(Sigma)
+        Sigma = 0.5*(Sigma + Sigma.T)      # force symmetry
+        base   = np.trace(Sigma)/Sigma.shape[0]
+        Sigma += (1e-6*base if base>1e-12 else 1e-6) * np.eye(Sigma.shape[0])
+
+        pi = robust_pi
+        # pi = returns_lookback.mean().values.reshape(-1, 1)
+        # Sigma, pi = robust_covariance_estimation(asset_list, '2015-01-01', '2023-01-01')
+        min_eig = eigvalsh(Sigma).min()
+        if min_eig < 0:
+            Sigma -= 10 * min_eig * np.eye(*Sigma.shape)
         
         # Check predictions: asset_list must be a subset of pred_pivot columns
         if not set(asset_list).issubset(set(pred_pivot.columns)):
@@ -193,8 +217,8 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
         
         # Update expected returns via BL
         updated_returns = black_litterman_update(pi, Sigma, q, confidences)
-        bl_weights = max_sharpe_portfolio(Sigma, updated_returns, risk_free_rate=RISK_FREE_RATE)
-        # bl_weights = mean_variance_portfolio(Sigma, updated_returns, risk_aversion=RISK_AVERSION)
+        # bl_weights = max_sharpe_portfolio(Sigma, updated_returns, risk_free_rate=RISK_FREE_RATE)
+        bl_weights = mean_variance_portfolio(Sigma, updated_returns, risk_aversion=RISK_AVERSION)
         weights_history.append(bl_weights.flatten())
         
         n = len(asset_list)

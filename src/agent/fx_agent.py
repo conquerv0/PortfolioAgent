@@ -158,7 +158,7 @@ class FXDataCollector(DataCollector):
         logger.info("Starting fixed income data collection...")
         etf_data = self.get_etf_data(tickers, self.full_start_date, self.end_date)
         print(f"Collected ETF data with shape: {etf_data.shape}")
-            
+        
         # Calculate momentum factors
         print("\nCalculating momentum factors...")
         data_with_momentum = self.get_momentum_factors(etf_data)
