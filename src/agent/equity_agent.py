@@ -161,8 +161,12 @@ class EquityDataCollector(DataCollector):
         logger.info("Saved daily equity features.")
 
         # Weekly
-        weekly = daily.resample("W-FRI").last()
-        for col in ["VIX", "MOVE"]:
+        # weekly = daily.resample("W-FRI").last()
+        weekly = daily.resample("W-FRI").last() # a minor change here (4/27 to align the prediction)
+        macro_cols = ["INDPRO","RSAFS","HOUST","UNRATE",
+              "PCEPILFE","CPIAUCSL","EFFR",
+              "T10Y2Y","BAA10Y","DCOILWTICO","PCOPPUSDM"]
+        for col in macro_cols + ["VIX","MOVE"]:
             if col in weekly.columns:
                 weekly[f"{col}_weekly_change"] = weekly[col].pct_change()
         weekly = weekly[self.target_start_date:self.end_date]
@@ -273,16 +277,13 @@ class EquityAgent(PortfolioAgent):
     #         formatted_prompt = prompt.format(**row_copy.to_dict())
 
     #     return formatted_prompt
-    def estimate_returns(self, weekly_frame, tickers, span_weeks=4):
-        # 1. Compute WEEKLY returns first
-        prices = weekly_frame[tickers]            # Friday closes
-        wk_ret = prices.pct_change()
 
-        # 2. EWMA of weekly returns over `span_weeks`
-        alpha = wk_ret.ewm(span=span_weeks).mean()
-
-        alpha.columns = [f"{c}_baseline_ret" for c in alpha.columns]
-        return alpha
+    def estimate_returns(self, daily_px, tickers, span_days=20):
+        daily_ret = daily_px[tickers].pct_change()
+        ewma      = daily_ret.ewm(span=span_days).mean()
+        alpha_w   = ewma.resample('W-FRI').last()    # value known on Fri t
+        alpha_w.columns = [f"{c}_baseline_ret" for c in alpha_w.columns]
+        return alpha_w
 
     
     def prepare_prompt(self, row: pd.Series, default: float = 0.0) -> str:
@@ -291,21 +292,21 @@ class EquityAgent(PortfolioAgent):
         where data are missing or NaN.
         """
         PROMPT_TEMPLATE = textwrap.dedent("""
-        Based only on the given data for week ending **{date}**:U.S. macro indicator, risk-sentiment proxy and sector-ETF adjusted_close prices, a baseline return estimated by a quantitative mode
+        Based only on the given data for week ending **{date}**:Some U.S. macro indicator changes, risk-sentiment proxy and sector-ETF adjusted_close prices, a baseline return estimated by a quantitative mode
                                           and some technical features features of the etf returns of given period, predict your **variance_view** the alpha you expect above/below baseline 
 
         ▌Macro snapshot
-        • Industrial Production INDPRO…… {INDPRO:.2f}
-        • Retail Sales ex-Food RSAFS…… {RSAFS:.2f}
-        • Housing Starts HOUST…………… {HOUST:.2f}
-        • Unemployment Rate UNRATE…… {UNRATE:.2f} %
-        • Core PCE PCEPILFE……………… {PCEPILFE:.2f}
-        • CPI CPIAUCSL………………… {CPIAUCSL:.2f}
-        • Fed Funds EFFR………………… {EFFR:.2f}
-        • 10Y-2Y Spread………………… {T10Y2Y:.3f} %
-        • BAA Credit Spread…………… {BAA10Y:.3f} %
-        • WTI Oil $………………… {DCOILWTICO:.2f}
-        • Copper $………………… {PCOPPUSDM:.2f}
+        • Industrial Production INDPRO…… {INDPRO_weekly_change:.2f}
+        • Retail Sales ex-Food RSAFS…… {RSAFS_weekly_change:.2f}
+        • Housing Starts HOUST…………… {HOUST_weekly_change:.2f}
+        • Unemployment Rate UNRATE…… {UNRATE_weekly_change:.2f} %
+        • Core PCE PCEPILFE……………… {PCEPILFE_weekly_change:.2f}
+        • CPI CPIAUCSL………………… {CPIAUCSL_weekly_change:.2f}
+        • Fed Funds EFFR………………… {EFFR_weekly_change:.2f}
+        • 10Y-2Y Spread………………… {T10Y2Y_weekly_change:.3f} %
+        • BAA Credit Spread…………… {BAA10Y_weekly_change:.3f} %
+        • WTI Oil $………………… {DCOILWTICO_weekly_change:.2f}
+        • Copper $………………… {PCOPPUSDM_weekly_change:.2f}
 
         ▌Risk sentiment
         • VIX………… {VIX:.2f}  (Δ {VIX_weekly_change:.3f})
@@ -411,6 +412,9 @@ class EquityAgent(PortfolioAgent):
     #  End-to-end weekly pipeline
     # ------------------------------------------------------------------
     def run_pipeline(self, start_date, end_date):
+        # load daily data
+        data_d = pd.read_csv("data/equity_combined_features_daily.csv", index_col=0, parse_dates=True)
+        # load weekly data
         print("Loading weekly equity data…")
         weekly_path = "data/equity_combined_features_weekly.csv"
         if os.path.exists(weekly_path):
@@ -420,7 +424,8 @@ class EquityAgent(PortfolioAgent):
 
         # ── 1.  add baseline_ret columns  ─────────────────────────────────
         tickers     = [p["etf"] for p in PORTFOLIOS["equity"]["sectors"]]
-        baseline_w  = self.estimate_returns(data_w, tickers, span_weeks=4)             # <- ewma_1m
+        baseline_w  = self.estimate_returns(data_d[tickers], tickers)             # <- ewma_1m
+        baseline_w   = baseline_w.reindex(data_w.index)
         data_w      = pd.concat([data_w, baseline_w], axis=1)
 
         # ── 2.  main loop  ───────────────────────────────────────────────
