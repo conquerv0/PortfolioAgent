@@ -16,14 +16,6 @@ TAU = 0.2             # Scaling parameter for the prior covariance in BL
 RISK_AVERSION = 1       # Risk aversion parameter for mean-variance optimization
 RISK_FREE_RATE = 0.0
 
-# Mapping for FX instruments
-fx_instrument_to_etf = {
-    "EUR/USD": "FXE",
-    "GBP/USD": "FXB",
-    "USD/JPY": "FXY",
-    "USD/CHF": "FXF",
-    "USD/CAD": "FXC"
-}
 from src.config.settings import PORTFOLIOS  
 
 # Define asset lists from settings
@@ -254,8 +246,9 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
             
         next_returns = np.clip(next_returns, -0.5, 0.5)
         
-        bl_port_return = float(bl_weights.T @ next_returns.reshape(-1, 1))
-        eq_port_return = float(eq_weights.T @ next_returns.reshape(-1, 1))
+        # Fix: Extract scalar values from matrix multiplication
+        bl_port_return = float((bl_weights.T @ next_returns.reshape(-1, 1))[0, 0])
+        eq_port_return = float((eq_weights.T @ next_returns.reshape(-1, 1))[0, 0])
         
         results.append({
             'date': current_date,
@@ -340,7 +333,7 @@ def plot_cumulative_returns(results_df, asset_class):
 # Main function
 def main():
     # Change asset_class to "fx", "fi", "equity", or "commodity" as needed
-    asset_class = "commodity"  # or "fi", "equity", "commodity" for other asset classes
+    asset_class = "fx"  # or "fi", "equity", "commodity" for other asset classes
     predictions, actual_data = load_data(asset_class=asset_class)
     
     if asset_class == "fx":

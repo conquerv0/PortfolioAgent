@@ -43,7 +43,7 @@ TICKERS: List[str] = list(SECTOR_TO_ETF.values())
 SECTOR_NAMES: List[str] = list(SECTOR_TO_ETF.keys())
 
 # -----------------------------------------------------------------------------
-# Prediction JSON schema (mirrors latest equity agent – variance_view)
+# Prediction JSON schema 
 # -----------------------------------------------------------------------------
 PREDICTION_SCHEMA = {
     "name": "commodity_prediction",
@@ -66,7 +66,7 @@ PREDICTION_SCHEMA = {
                         },
                         "confidence": {
                             "type": "number",
-                            "description": "Confidence 0‑1"
+                            "description": "Confidence 0-1"
                         },
                         "rationale": {
                             "type": "string",
@@ -79,7 +79,7 @@ PREDICTION_SCHEMA = {
             },
             "overall_analysis": {
                 "type": "string",
-                "description": "Cross‑sector commodity narrative"
+                "description": "Cross-sector commodity narrative"
             }
         },
         "required": ["instruments", "overall_analysis"],
@@ -133,7 +133,7 @@ class CommodityDataCollector(DataCollector):
         adj_close = self.get_etf_adj_close(self.tickers, self.full_start_date, self.end_date)
         
         if adj_close.empty:
-            logger.error("No ETF data – abort")
+            logger.error("No ETF data - abort")
             return pd.DataFrame()
 
         # Calculate technical features
