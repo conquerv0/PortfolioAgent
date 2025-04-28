@@ -21,7 +21,7 @@ var/
 *.egg
 
 # Data files
-data/
+data/temp/
 playground.ipynb
 
 # Environment
