@@ -35,7 +35,7 @@ FRED_API_KEY = os.getenv("FRED_API_KEY")
 # Portfolio helpers
 # -----------------------------------------------------------------------------
 SECTOR_DEFS: List[Dict] = PORTFOLIOS["commodity"]["sectors"]
-SECTOR_TO_ETF: Dict[str, str] = {s["name"]: s["etf"][0] for s in SECTOR_DEFS}  # primary ETF per sector
+SECTOR_TO_ETF: Dict[str, str] = {s["name"]: s["etf"] for s in SECTOR_DEFS}  # primary ETF per sector
 TICKERS: List[str] = list(SECTOR_TO_ETF.values())
 SECTOR_NAMES: List[str] = list(SECTOR_TO_ETF.keys())
 
@@ -168,7 +168,13 @@ class CommodityAgent(PortfolioAgent):
 
     # ------- baseline estimation (EWMA 20d) -----------------------
     def estimate_returns(self, daily_px: pd.DataFrame, tickers: List[str], span_days: int = 20):
-        daily_ret = daily_px[tickers].pct_change()
+        # Ensure all tickers are in the dataframe
+        available_tickers = [t for t in tickers if t in daily_px.columns]
+        if len(available_tickers) != len(tickers):
+            missing = set(tickers) - set(available_tickers)
+            logger.warning(f"Missing tickers in data: {missing}")
+        
+        daily_ret = daily_px[available_tickers].pct_change()
         ewma = daily_ret.ewm(span=span_days).mean()
         alpha_w = ewma.resample("W-FRI").last()
         alpha_w.columns = [f"{c}_baseline_ret" for c in alpha_w.columns]
@@ -189,6 +195,14 @@ class CommodityAgent(PortfolioAgent):
         • VIX…… {VIX:.2f} (Δ {VIX_weekly_change:.3f})
         • MOVE… {MOVE:.2f} (Δ {MOVE_weekly_change:.3f})
 
+        ▌Volatility metrics
+        | Sector | 1M Vol | 3M Vol |
+        | Energy               | {Energy_vol_1m:.4f} | {Energy_vol_3m:.4f} |
+        | Precious Metals      | {Precious_vol_1m:.4f} | {Precious_vol_3m:.4f} |
+        | Industrial Metals    | {Industrial_vol_1m:.4f} | {Industrial_vol_3m:.4f} |
+        | Agriculture          | {Agriculture_vol_1m:.4f} | {Agriculture_vol_3m:.4f} |
+        | Livestock            | {Livestock_vol_1m:.4f} | {Livestock_vol_3m:.4f} |
+
         ▌Sector ETF table
         | Sector | ETF | adj_close | baseline_ret | ewma_1w | ewma_1m |
         | Energy               | {Energy_etf} | {Energy_px:.4f} | {Energy_baseline:.4f} | {Energy_ewma_1w:.4f} | {Energy_ewma_1m:.4f} |
@@ -203,6 +217,9 @@ class CommodityAgent(PortfolioAgent):
         2. confidence 0‑1
         3. rationale (1 sentence)
         Add **overall_analysis** summarising the drivers.
+
+        IMPORTANT: Your predictions should align with current volatility – in higher volatility regimes, your variance_view should be more aggressive (larger magnitude) and not too conservative. Use the volatility metrics as a guide for how bold your predictions should be.
+        
         Respond **only** with JSON matching the schema.
         """)
 
@@ -226,6 +243,8 @@ class CommodityAgent(PortfolioAgent):
             mapping[f"{key}_baseline"]     = row.get(f"{etf}_baseline_ret", default)
             mapping[f"{key}_ewma_1w"]      = row.get(f"{etf}_ewma_1w", default)
             mapping[f"{key}_ewma_1m"]      = row.get(f"{etf}_ewma_1m", default)
+            mapping[f"{key}_vol_1m"]       = row.get(f"{etf}_vol_1m", default)  # 1M volatility
+            mapping[f"{key}_vol_3m"]       = row.get(f"{etf}_vol_3m", default)  # 3M volatility
         sec("Energy", SECTOR_TO_ETF["Energy"])
         sec("Precious", SECTOR_TO_ETF["Precious Metals"])
         sec("Industrial", SECTOR_TO_ETF["Industrial Metals"])
@@ -240,7 +259,7 @@ class CommodityAgent(PortfolioAgent):
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are a commodities strategist forecasting 1‑week alpha vs baseline for broad commodity sectors."},
+                    {"role": "system", "content": "You are a commodities strategist forecasting 1‑week alpha vs baseline for broad commodity sectors. Your predictions should be aligned with market volatility - in higher volatility regimes, make bolder predictions with larger magnitudes. Avoid being too conservative; ensure your variance views reflect current market conditions."},
                     {"role": "user", "content": prompt}
                 ],
                 response_format={"type": "json_schema", "json_schema": PREDICTION_SCHEMA},
@@ -253,7 +272,8 @@ class CommodityAgent(PortfolioAgent):
 
     # ---------------- pipeline -------------------------------
     def run_pipeline(self, start_date: str, end_date: str):
-    
+        
+        logger.info(f"Using commodity ETF tickers: {TICKERS}")
         logger.info("Loading weekly commodity data…")
         if os.path.exists("data/commodity_combined_features_weekly.csv"):
             weekly = pd.read_csv("data/commodity_combined_features_weekly.csv", index_col=0, parse_dates=True)
