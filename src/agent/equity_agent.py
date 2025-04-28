@@ -156,7 +156,7 @@ class EquityDataCollector(DataCollector):
 
         # Save daily
         os.makedirs('data', exist_ok=True)
-        daily.to_csv('data/equity_combined_features_daily.csv')
+        daily.to_csv('data/features/equity_combined_features_daily.csv')
         logger.info("Saved daily equity features.")
 
         # Weekly
@@ -169,7 +169,7 @@ class EquityDataCollector(DataCollector):
             if col in weekly.columns:
                 weekly[f"{col}_weekly_change"] = weekly[col].pct_change()
         weekly = weekly[self.target_start_date:self.end_date]
-        weekly.to_csv("data/equity_combined_features_weekly.csv")
+        weekly.to_csv("data/features/equity_combined_features_weekly.csv")
         logger.info("Saved weekly equity features.")
 
         return weekly
@@ -330,7 +330,7 @@ class EquityAgent(PortfolioAgent):
         For every ETF provided above, please provide:
         1. Your**variance_view** non-conservative, high conviction view on the alpha you expect above/below baseline weekly return based on the analysis for next week. a decimal, (ex. –0.001 means 10 bp below baseline, 0 implies neutral.)
         2. A confidence score between 0 and 1,
-        3. A brief rationale for the prediction. (ex. "INDPRO +0.6 % and VIX −12 % indicate risk-on rotation.")
+        3. A brief rationale for the prediction. reference the data we supplied. (ex. "INDPRO +0.6 % and VIX −12 % indicate risk-on rotation.")
         4. Provide an include a top-level field **overall_analysis** summarizing how the data inform your predictions.
         
         Each baseline_ret is the **expected 1-week total return** (decimal).
@@ -412,7 +412,7 @@ class EquityAgent(PortfolioAgent):
     # ------------------------------------------------------------------
     def run_pipeline(self, start_date, end_date):
         # load daily data
-        data_d = pd.read_csv("data/equity_combined_features_daily.csv", index_col=0, parse_dates=True)
+        data_d = pd.read_csv("data/features/equity_combined_features_daily.csv", index_col=0, parse_dates=True)
         # load weekly data
         print("Loading weekly equity data…")
         weekly_path = "data/equity_combined_features_weekly.csv"
@@ -447,7 +447,7 @@ class EquityAgent(PortfolioAgent):
         # ── 3.  final post-processing  ───────────────────────────────────
         final_df = self._build_output(predictions, dates, name_to_etf, data_w)
 
-        final_path = "data/equity_weekly_predictions.csv"
+        final_path = "data/predictions/equity_weekly_predictions.csv"
         final_df.to_csv(final_path, index=False)
         print(f"Weekly equity predictions saved to '{final_path}'")
 

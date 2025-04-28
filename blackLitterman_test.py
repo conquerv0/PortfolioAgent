@@ -8,21 +8,29 @@ from src.agent.DataCollector import *
 from dateutil.relativedelta import relativedelta
 
 # ----- Global Parameters -----
-LOOKBACK_WEEKS = 10  
-ROBUST_LOOKBACK_WEEKS = 260     # ≈ 5 years  (adjust as you like)
-UNCERTAINTY_SCALE = 0.5   # Scaling factor for view uncertainty
+LOOKBACK_WEEKS = 4
+ROBUST_LOOKBACK_WEEKS = 260    # ≈ 5 years  (adjust as you like)
+UNCERTAINTY_SCALE = 0.2   # Scaling factor for view uncertainty
 EPSILON = 1e-4           # Small constant to avoid division by zero
 TAU = 0.2             # Scaling parameter for the prior covariance in BL
 RISK_AVERSION = 1       # Risk aversion parameter for mean-variance optimization
 RISK_FREE_RATE = 0.0
 
+# Mapping for FX instruments
+fx_instrument_to_etf = {
+    "EUR/USD": "FXE",
+    "GBP/USD": "FXB",
+    "USD/JPY": "FXY",
+    "USD/CHF": "FXF",
+    "USD/CAD": "FXC"
+}
 from src.config.settings import PORTFOLIOS  
 
 # Define asset lists from settings
 fx_tickers = [entry["etf"] for entry in PORTFOLIOS['fx'].get("currencies", [])]
 fi_tickers = [entry["etf"] for entry in PORTFOLIOS['bond'].get("treasuries", [])]
-equity_tickers = [entry["etf"] for entry in PORTFOLIOS["equity"].get("sectors", [])]
-commodity_tickers = [entry["etf"] for entry in PORTFOLIOS["commodity"].get("sectors", [])]
+equity_tickers = [entry["etf"] for entry in PORTFOLIOS["equity"]["sectors"]]
+commodity_tickers = [entry["etf"] for entry in PORTFOLIOS["commodity"]["sectors"]]
 # -----------------------------------------------
 # Data loading function
 def load_data(asset_class="fx"):
@@ -41,8 +49,8 @@ def load_data(asset_class="fx"):
     """
     asset_class = asset_class.lower()
     try:
-        pred_file   = f"data/predictions/{asset_class}_weekly_predictions.csv"
-        actual_file = f"data/features/{asset_class}_combined_features_weekly.csv"
+        pred_file   = f"data/{asset_class}_weekly_predictions.csv"
+        actual_file = f"data/{asset_class}_combined_features_weekly.csv"
     except:
         raise ValueError("asset_class must be 'fx', 'fi', 'equity', or 'commodity'!")
     
@@ -183,7 +191,7 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
                                     asset_list,
                                     robust_start_date,
                                     current_date.strftime("%Y-%m-%d"))
-        lambda_ = 0.3
+        lambda_ = 0.7
         Sigma = lambda_*Sigma_short + (1-lambda_)*Sigma_long         # or λ-blend of your choice
 
         # >>> add safety lines here <<<
@@ -205,38 +213,10 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
             continue
         
         q = pred_pivot.loc[current_date, asset_list].values.reshape(-1, 1)
-        # q = pred_pivot.loc[current_date, asset_list].values.reshape(-1, 1)
-
-        # # 2️⃣ Find next_date (guarded by empty‐check):
-        # future_dates = actual_data[actual_data['date'] > current_date]['date']
-        # if future_dates.empty:
-        #     continue
-        # next_date = future_dates.iloc[0]
-
-        # # 3️⃣ Grab the rows for current & future prices
-        # current_row = actual_data[actual_data['date'] == current_date]
-        # future_row  = actual_data[actual_data['date'] == next_date]
-        # if current_row.empty or future_row.empty:
-        #     continue
-
-        # # 4️⃣ Now compute your realized weekly returns
-        # realized = (future_row[asset_list].values.flatten() /
-        #             current_row[asset_list].values.flatten()) - 1
-
-        # # 5️⃣ **Print your summary stats here** (now next_date is defined)
-        # print(f"[{current_date.date()}]  mean(q)={q.mean():.6f},  std(q)={q.std():.6f}")
-        # print(f"[{current_date.date()}]  mean(realized)={realized.mean():.6f},  std(realized)={realized.std():.6f}")
-
-        # confidences = conf_pivot.loc[current_date, asset_list].values
         
-        # # Update expected returns via BL
-        # q_daily = pred_pivot.loc[current_date, asset_list].values.flatten()
-
-        # # true weekly return ≈ (1 + daily_return)**5 – 1
-        # q_weekly = ((1 + q_daily)**5 - 1).reshape(-1, 1)
-
-        # updated_returns = black_litterman_update(pi, Sigma, q_weekly, confidences)
-
+        confidences = conf_pivot.loc[current_date, asset_list].values
+        
+        # Update expected returns via BL
         updated_returns = black_litterman_update(pi, Sigma, q, confidences)
         # bl_weights = max_sharpe_portfolio(Sigma, updated_returns, risk_free_rate=RISK_FREE_RATE)
         bl_weights = mean_variance_portfolio(Sigma, updated_returns, risk_aversion=RISK_AVERSION)
@@ -275,9 +255,8 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
             
         next_returns = np.clip(next_returns, -0.5, 0.5)
         
-        # Fix: Extract scalar values from matrix multiplication
-        bl_port_return = float((bl_weights.T @ next_returns.reshape(-1, 1))[0, 0])
-        eq_port_return = float((eq_weights.T @ next_returns.reshape(-1, 1))[0, 0])
+        bl_port_return = float(bl_weights.T @ next_returns.reshape(-1, 1))
+        eq_port_return = float(eq_weights.T @ next_returns.reshape(-1, 1))
         
         results.append({
             'date': current_date,
@@ -362,7 +341,7 @@ def plot_cumulative_returns(results_df, asset_class):
 # Main function
 def main():
     # Change asset_class to "fx", "fi", "equity", or "commodity" as needed
-    asset_class = "fx"  # or "fi", "equity", "commodity" for other asset classes
+    asset_class = "equity"  # or "fi", "equity", "commodity" for other asset classes
     predictions, actual_data = load_data(asset_class=asset_class)
     
     if asset_class == "fx":
@@ -382,14 +361,14 @@ def main():
         return
     
     os.makedirs('data/evaluation', exist_ok=True)
-    results_df.to_csv(f'data/evaluation/{asset_class}_portfolio_returns_backtest.csv', index=False)
+    results_df.to_csv('data/evaluation/portfolio_returns_backtest.csv', index=False)
     plot_cumulative_returns(results_df, asset_class)
     
     # Calculate performance metrics for the BL portfolio returns
     bl_returns_series = results_df['bl_portfolio_return']
     metrics = calculate_performance_metrics(bl_returns_series, weights_history, risk_free_rate=0)
     
-    print("Performance Metrics:")
+    print("Performance Metrics:") 
     for key, value in metrics.items():
         print(f"  {key}: {value:.4f}")
     
