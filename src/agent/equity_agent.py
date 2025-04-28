@@ -329,7 +329,7 @@ class EquityAgent(PortfolioAgent):
 
         **Task**
         For every ETF provided above, please provide:
-        1. Your**variance_view** – the alpha you expect above/below baseline weekly return based on the analysis for next week. a decimal, (ex. –0.001 means 10 bp below baseline, 0 implies neutral.)
+        1. Your**variance_view** non-conservative, high conviction view on the alpha you expect above/below baseline weekly return based on the analysis for next week. a decimal, (ex. –0.001 means 10 bp below baseline, 0 implies neutral.)
         2. A confidence score between 0 and 1,
         3. A brief rationale for the prediction. (ex. "INDPRO +0.6 % and VIX −12 % indicate risk-on rotation.")
         4. Provide an include a top-level field **overall_analysis** summarizing how the data inform your predictions.

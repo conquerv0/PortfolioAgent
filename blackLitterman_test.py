@@ -191,7 +191,7 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
                                     asset_list,
                                     robust_start_date,
                                     current_date.strftime("%Y-%m-%d"))
-        lambda_ = 0.7
+        lambda_ = 0.3
         Sigma = lambda_*Sigma_short + (1-lambda_)*Sigma_long         # or λ-blend of your choice
 
         # >>> add safety lines here <<<
@@ -213,9 +213,38 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
             continue
         
         q = pred_pivot.loc[current_date, asset_list].values.reshape(-1, 1)
-        confidences = conf_pivot.loc[current_date, asset_list].values
+        # q = pred_pivot.loc[current_date, asset_list].values.reshape(-1, 1)
+
+        # # 2️⃣ Find next_date (guarded by empty‐check):
+        # future_dates = actual_data[actual_data['date'] > current_date]['date']
+        # if future_dates.empty:
+        #     continue
+        # next_date = future_dates.iloc[0]
+
+        # # 3️⃣ Grab the rows for current & future prices
+        # current_row = actual_data[actual_data['date'] == current_date]
+        # future_row  = actual_data[actual_data['date'] == next_date]
+        # if current_row.empty or future_row.empty:
+        #     continue
+
+        # # 4️⃣ Now compute your realized weekly returns
+        # realized = (future_row[asset_list].values.flatten() /
+        #             current_row[asset_list].values.flatten()) - 1
+
+        # # 5️⃣ **Print your summary stats here** (now next_date is defined)
+        # print(f"[{current_date.date()}]  mean(q)={q.mean():.6f},  std(q)={q.std():.6f}")
+        # print(f"[{current_date.date()}]  mean(realized)={realized.mean():.6f},  std(realized)={realized.std():.6f}")
+
+        # confidences = conf_pivot.loc[current_date, asset_list].values
         
-        # Update expected returns via BL
+        # # Update expected returns via BL
+        # q_daily = pred_pivot.loc[current_date, asset_list].values.flatten()
+
+        # # true weekly return ≈ (1 + daily_return)**5 – 1
+        # q_weekly = ((1 + q_daily)**5 - 1).reshape(-1, 1)
+
+        # updated_returns = black_litterman_update(pi, Sigma, q_weekly, confidences)
+
         updated_returns = black_litterman_update(pi, Sigma, q, confidences)
         # bl_weights = max_sharpe_portfolio(Sigma, updated_returns, risk_free_rate=RISK_FREE_RATE)
         bl_weights = mean_variance_portfolio(Sigma, updated_returns, risk_aversion=RISK_AVERSION)

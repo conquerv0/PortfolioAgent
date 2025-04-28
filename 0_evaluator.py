@@ -84,7 +84,7 @@ coverage = pred.notna().mean().sort_values()
 print("\nPrediction coverage:")
 print(coverage[coverage < 0.9])
 
-BEST_LAG = np.argmax(ic_lag)-1         # replace with the argmax from ic_lag
+BEST_LAG = np.argmax(ic_lag)        # replace with the argmax from ic_lag
 
 real_aligned = realised.shift(-BEST_LAG).loc[pred.index]
 
