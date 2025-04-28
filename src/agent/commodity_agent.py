@@ -124,13 +124,13 @@ class CommodityDataCollector(DataCollector):
             return pd.DataFrame()
 
         # Technical features
-        returns = adj_close.pct_change().dropna()
+        returns = adj_close.pct_change(fill_method=None).dropna()
         # momentum
         mom = pd.DataFrame(index=adj_close.index)
         for t in self.tickers:
-            mom[f"{t}_mom_1m"] = adj_close[t].pct_change(21)
-            mom[f"{t}_mom_3m"] = adj_close[t].pct_change(63)
-            mom[f"{t}_mom_12m"] = adj_close[t].pct_change(252)
+            mom[f"{t}_mom_1m"] = adj_close[t].pct_change(21, fill_method=None)
+            mom[f"{t}_mom_3m"] = adj_close[t].pct_change(63, fill_method=None)
+            mom[f"{t}_mom_12m"] = adj_close[t].pct_change(252, fill_method=None)
         # ewma 1m & 1w
         ewma_1m = self.get_ewma_factor(adj_close, span=21)
         ewma_1w = self.get_ewma_factor(adj_close, span=5)
@@ -153,7 +153,7 @@ class CommodityDataCollector(DataCollector):
         weekly = daily.resample("W-FRI").last()
         for col in ["USD_Index", "WTI_Oil", "Gold_Spot", "ISM_NewOrders", "VIX", "MOVE"]:
             if col in weekly.columns:
-                weekly[f"{col}_weekly_change"] = weekly[col].pct_change()
+                weekly[f"{col}_weekly_change"] = weekly[col].pct_change(fill_method=None)
         weekly = weekly[self.target_start_date:self.end_date]
         weekly.to_csv("data/commodity_combined_features_weekly.csv")
         logger.info("Saved weekly commodity features")
@@ -174,7 +174,7 @@ class CommodityAgent(PortfolioAgent):
             missing = set(tickers) - set(available_tickers)
             logger.warning(f"Missing tickers in data: {missing}")
         
-        daily_ret = daily_px[available_tickers].pct_change()
+        daily_ret = daily_px[available_tickers].pct_change(fill_method=None)
         ewma = daily_ret.ewm(span=span_days).mean()
         alpha_w = ewma.resample("W-FRI").last()
         alpha_w.columns = [f"{c}_baseline_ret" for c in alpha_w.columns]
@@ -195,21 +195,13 @@ class CommodityAgent(PortfolioAgent):
         • VIX…… {VIX:.2f} (Δ {VIX_weekly_change:.3f})
         • MOVE… {MOVE:.2f} (Δ {MOVE_weekly_change:.3f})
 
-        ▌Volatility metrics
-        | Sector | 1M Vol | 3M Vol |
-        | Energy               | {Energy_vol_1m:.4f} | {Energy_vol_3m:.4f} |
-        | Precious Metals      | {Precious_vol_1m:.4f} | {Precious_vol_3m:.4f} |
-        | Industrial Metals    | {Industrial_vol_1m:.4f} | {Industrial_vol_3m:.4f} |
-        | Agriculture          | {Agriculture_vol_1m:.4f} | {Agriculture_vol_3m:.4f} |
-        | Livestock            | {Livestock_vol_1m:.4f} | {Livestock_vol_3m:.4f} |
-
         ▌Sector ETF table
-        | Sector | ETF | adj_close | baseline_ret | ewma_1w | ewma_1m |
-        | Energy               | {Energy_etf} | {Energy_px:.4f} | {Energy_baseline:.4f} | {Energy_ewma_1w:.4f} | {Energy_ewma_1m:.4f} |
-        | Precious Metals      | {Precious_etf} | {Precious_px:.4f} | {Precious_baseline:.4f} | {Precious_ewma_1w:.4f} | {Precious_ewma_1m:.4f} |
-        | Industrial Metals    | {Industrial_etf} | {Industrial_px:.4f} | {Industrial_baseline:.4f} | {Industrial_ewma_1w:.4f} | {Industrial_ewma_1m:.4f} |
-        | Agriculture          | {Agriculture_etf} | {Agriculture_px:.4f} | {Agriculture_baseline:.4f} | {Agriculture_ewma_1w:.4f} | {Agriculture_ewma_1m:.4f} |
-        | Livestock            | {Livestock_etf} | {Livestock_px:.4f} | {Livestock_baseline:.4f} | {Livestock_ewma_1w:.4f} | {Livestock_ewma_1m:.4f} |
+        | Sector | ETF | adj_close | baseline_ret | ewma_1w | ewma_1m | vol_1m |
+        | Energy               | {Energy_etf} | {Energy_px:.4f} | {Energy_baseline:.4f} | {Energy_ewma_1w:.4f} | {Energy_ewma_1m:.4f} | {Energy_vol_1m:.4f} |
+        | Precious Metals      | {Precious_etf} | {Precious_px:.4f} | {Precious_baseline:.4f} | {Precious_ewma_1w:.4f} | {Precious_ewma_1m:.4f} | {Precious_vol_1m:.4f} |
+        | Industrial Metals    | {Industrial_etf} | {Industrial_px:.4f} | {Industrial_baseline:.4f} | {Industrial_ewma_1w:.4f} | {Industrial_ewma_1m:.4f} | {Industrial_vol_1m:.4f} |
+        | Agriculture          | {Agriculture_etf} | {Agriculture_px:.4f} | {Agriculture_baseline:.4f} | {Agriculture_ewma_1w:.4f} | {Agriculture_ewma_1m:.4f} | {Agriculture_vol_1m:.4f} |
+        | Livestock            | {Livestock_etf} | {Livestock_px:.4f} | {Livestock_baseline:.4f} | {Livestock_ewma_1w:.4f} | {Livestock_ewma_1m:.4f} | {Livestock_vol_1m:.4f} |
 
         **Task**
         For each sector, provide:
@@ -223,28 +215,39 @@ class CommodityAgent(PortfolioAgent):
         Respond **only** with JSON matching the schema.
         """)
 
+        # Helper to safely convert values to float
+        def safe_float(val, default_val=default):
+            try:
+                if isinstance(val, pd.Series):
+                    # Take the first value if it's a Series
+                    return float(val.iloc[0]) if not val.empty else default_val
+                return float(val)
+            except (ValueError, TypeError):
+                return default_val
+
         # Build mapping dict
         mapping = {
             "date": row.name.date(),
             # Macro / sentiment
-            "USD_Index_weekly_change": row.get("USD_Index_weekly_change", default),
-            "ISM_NewOrders_weekly_change": row.get("ISM_NewOrders_weekly_change", default),
-            "WTI_Oil_weekly_change": row.get("WTI_Oil_weekly_change", default),
-            "Gold_Spot_weekly_change": row.get("Gold_Spot_weekly_change", default),
-            "VIX": row.get("VIX", default),
-            "VIX_weekly_change": row.get("VIX_weekly_change", default),
-            "MOVE": row.get("MOVE", default),
-            "MOVE_weekly_change": row.get("MOVE_weekly_change", default),
+            "USD_Index_weekly_change": safe_float(row.get("USD_Index_weekly_change", default)),
+            "ISM_NewOrders_weekly_change": safe_float(row.get("ISM_NewOrders_weekly_change", default)),
+            "WTI_Oil_weekly_change": safe_float(row.get("WTI_Oil_weekly_change", default)),
+            "Gold_Spot_weekly_change": safe_float(row.get("Gold_Spot_weekly_change", default)),
+            "VIX": safe_float(row.get("VIX", default)),
+            "VIX_weekly_change": safe_float(row.get("VIX_weekly_change", default)),
+            "MOVE": safe_float(row.get("MOVE", default)),
+            "MOVE_weekly_change": safe_float(row.get("MOVE_weekly_change", default)),
         }
+        
         # Sector rows
         def sec(key, etf):
-            mapping[f"{key}_etf"]          = etf
-            mapping[f"{key}_px"]           = row.get(etf, default)
-            mapping[f"{key}_baseline"]     = row.get(f"{etf}_baseline_ret", default)
-            mapping[f"{key}_ewma_1w"]      = row.get(f"{etf}_ewma_1w", default)
-            mapping[f"{key}_ewma_1m"]      = row.get(f"{etf}_ewma_1m", default)
-            mapping[f"{key}_vol_1m"]       = row.get(f"{etf}_vol_1m", default)  # 1M volatility
-            mapping[f"{key}_vol_3m"]       = row.get(f"{etf}_vol_3m", default)  # 3M volatility
+            mapping[f"{key}_etf"] = etf
+            mapping[f"{key}_px"] = safe_float(row.get(etf, default))
+            mapping[f"{key}_baseline"] = safe_float(row.get(f"{etf}_baseline_ret", default))
+            mapping[f"{key}_ewma_1w"] = safe_float(row.get(f"{etf}_ewma_1w", default))
+            mapping[f"{key}_ewma_1m"] = safe_float(row.get(f"{etf}_ewma_1m", default))
+            mapping[f"{key}_vol_1m"] = safe_float(row.get(f"{etf}_vol_1m", default))
+            
         sec("Energy", SECTOR_TO_ETF["Energy"])
         sec("Precious", SECTOR_TO_ETF["Precious Metals"])
         sec("Industrial", SECTOR_TO_ETF["Industrial Metals"])

@@ -9,24 +9,6 @@ DATA_PATHS = {
 }
 
 # Default date ranges
-
-'''
-DATE_RANGES = {
-    "training": {
-        "start_date": date(2020, 1, 1),
-        "end_date": date(2022, 12, 31),
-    },
-    "testing": {
-        "start_date": date(2023, 1, 1),
-        "end_date": date(2023, 12, 31),
-    },
-    "validation": {
-        "start_date": date(2024, 1, 1),
-        "end_date": date.today(),
-    }
-}  
-'''
-
 DATE_RANGES = {
     "test_period": {
         "start_date": date(2023, 11, 1),
@@ -97,7 +79,7 @@ PORTFOLIOS = {
             {"name": "Precious Metals", "etf": "GLD", "weight": 0.0},
             {"name": "Industrial Metals", "etf": "CPER", "weight": 0.0},
             {"name": "Agriculture", "etf": "CORN", "weight": 0.0},
-            {"name": "Livestock", "etf": "COW", "weight": 0.0},
+            {"name": "Livestock", "etf": "COW.TO", "weight": 0.0},
         ],
     },
     
