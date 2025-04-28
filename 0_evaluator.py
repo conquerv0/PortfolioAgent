@@ -6,13 +6,14 @@ import os
 # ------------------------------------------------------------------
 from src.config.settings import PORTFOLIOS  
 
-asset_class = "equity"  # fx, equity, bond, commodity
+asset_class = "commodity"  # fx, equity, bond, commodity
 PRED_FILE   = f"data/{asset_class}_weekly_predictions.csv"  
 PRICE_FILE  = f"data/{asset_class}_combined_features_weekly.csv"       # already saved
 fx_tickers = [entry["etf"] for entry in PORTFOLIOS['fx'].get("currencies", [])]
 fi_tickers = [entry["etf"] for entry in PORTFOLIOS['bond'].get("treasuries", [])]
 equity_tickers = [entry["etf"] for entry in PORTFOLIOS["equity"]["sectors"]]
-commodity_tickers = [entry["etf"] for entry in PORTFOLIOS["commodity"]["sectors"]]
+commodity_tickers = [entry["etf"] for entry in PORTFOLIOS["commodity"].get("sectors", [])]
+
 
 if asset_class == "fx":
     TICKERS = fx_tickers

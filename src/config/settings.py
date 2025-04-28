@@ -93,11 +93,11 @@ PORTFOLIOS = {
     # Commodity sectors based on Bloomberg Commodity Index (BCOM) classification
     "commodity": {
         "sectors": [
-            {"name": "Energy", "etf": ["USO", "UNG"], "weight": 0.0},
-            {"name": "Precious Metals", "etf": ["GLD", "SLV"], "weight": 0.0},
-            {"name": "Industrial Metals", "etf": ["CPER", "JJN", "JJT", "JJU"], "weight": 0.0},
-            {"name": "Agriculture", "etf": ["CORN", "WEAT", "SOYB", "JO"], "weight": 0.0},
-            {"name": "Livestock", "etf": ["COW"], "weight": 0.0},
+            {"name": "Energy", "etf": "USO", "weight": 0.0},
+            {"name": "Precious Metals", "etf": "GLD", "weight": 0.0},
+            {"name": "Industrial Metals", "etf": "CPER", "weight": 0.0},
+            {"name": "Agriculture", "etf": "CORN", "weight": 0.0},
+            {"name": "Livestock", "etf": "COW", "weight": 0.0},
         ],
     },
     
