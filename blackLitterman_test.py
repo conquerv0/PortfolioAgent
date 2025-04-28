@@ -41,8 +41,8 @@ def load_data(asset_class="fx"):
     """
     asset_class = asset_class.lower()
     try:
-        pred_file   = f"data/{asset_class}_weekly_predictions.csv"
-        actual_file = f"data/{asset_class}_combined_features_weekly.csv"
+        pred_file   = f"data/predictions/{asset_class}_weekly_predictions.csv"
+        actual_file = f"data/features/{asset_class}_combined_features_weekly.csv"
     except:
         raise ValueError("asset_class must be 'fx', 'fi', 'equity', or 'commodity'!")
     
