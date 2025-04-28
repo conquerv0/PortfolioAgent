@@ -16,21 +16,13 @@ TAU = 0.2             # Scaling parameter for the prior covariance in BL
 RISK_AVERSION = 1       # Risk aversion parameter for mean-variance optimization
 RISK_FREE_RATE = 0.0
 
-# Mapping for FX instruments
-fx_instrument_to_etf = {
-    "EUR/USD": "FXE",
-    "GBP/USD": "FXB",
-    "USD/JPY": "FXY",
-    "USD/CHF": "FXF",
-    "USD/CAD": "FXC"
-}
 from src.config.settings import PORTFOLIOS  
 
 # Define asset lists from settings
 fx_tickers = [entry["etf"] for entry in PORTFOLIOS['fx'].get("currencies", [])]
 fi_tickers = [entry["etf"] for entry in PORTFOLIOS['bond'].get("treasuries", [])]
-equity_tickers = [entry["etf"] for entry in PORTFOLIOS["equity"]["sectors"]]
-commodity_tickers = [entry["etf"] for entry in PORTFOLIOS["commodity"]["sectors"]]
+equity_tickers = [entry["etf"] for entry in PORTFOLIOS["equity"].get("sectors", [])]
+commodity_tickers = [entry["etf"] for entry in PORTFOLIOS["commodity"].get("sectors", [])]
 # -----------------------------------------------
 # Data loading function
 def load_data(asset_class="fx"):
@@ -49,8 +41,8 @@ def load_data(asset_class="fx"):
     """
     asset_class = asset_class.lower()
     try:
-        pred_file   = f"data/{asset_class}_weekly_predictions.csv"
-        actual_file = f"data/{asset_class}_combined_features_weekly.csv"
+        pred_file   = f"data/predictions/{asset_class}_weekly_predictions.csv"
+        actual_file = f"data/features/{asset_class}_combined_features_weekly.csv"
     except:
         raise ValueError("asset_class must be 'fx', 'fi', 'equity', or 'commodity'!")
     
@@ -283,8 +275,9 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
             
         next_returns = np.clip(next_returns, -0.5, 0.5)
         
-        bl_port_return = float(bl_weights.T @ next_returns.reshape(-1, 1))
-        eq_port_return = float(eq_weights.T @ next_returns.reshape(-1, 1))
+        # Fix: Extract scalar values from matrix multiplication
+        bl_port_return = float((bl_weights.T @ next_returns.reshape(-1, 1))[0, 0])
+        eq_port_return = float((eq_weights.T @ next_returns.reshape(-1, 1))[0, 0])
         
         results.append({
             'date': current_date,
@@ -369,7 +362,7 @@ def plot_cumulative_returns(results_df, asset_class):
 # Main function
 def main():
     # Change asset_class to "fx", "fi", "equity", or "commodity" as needed
-    asset_class = "equity"  # or "fi", "equity", "commodity" for other asset classes
+    asset_class = "fx"  # or "fi", "equity", "commodity" for other asset classes
     predictions, actual_data = load_data(asset_class=asset_class)
     
     if asset_class == "fx":
@@ -389,7 +382,7 @@ def main():
         return
     
     os.makedirs('data/evaluation', exist_ok=True)
-    results_df.to_csv('data/evaluation/portfolio_returns_backtest.csv', index=False)
+    results_df.to_csv(f'data/evaluation/{asset_class}_portfolio_returns_backtest.csv', index=False)
     plot_cumulative_returns(results_df, asset_class)
     
     # Calculate performance metrics for the BL portfolio returns

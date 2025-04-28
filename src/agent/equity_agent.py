@@ -2,7 +2,6 @@ import os
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
-from langchain_community.llms import OpenAI
 import os
 import sys
 import time
