@@ -232,8 +232,8 @@ class FXDataCollector(DataCollector):
         daily = daily[self.full_start_date:self.end_date]
         
         # Save daily features
-        os.makedirs("data", exist_ok=True)
-        daily.to_csv("data/fx_combined_features_daily.csv")
+        os.makedirs("data/features", exist_ok=True)
+        daily.to_csv("data/features/fx_combined_features_daily.csv")
         logger.info("Saved daily FX features")
 
         # Resample to weekly and calculate additional features
@@ -250,7 +250,7 @@ class FXDataCollector(DataCollector):
                 
         # Filter by target date range and save
         weekly = weekly[self.target_start_date:self.end_date]
-        weekly.to_csv("data/fx_combined_features_weekly.csv")
+        weekly.to_csv("data/features/fx_combined_features_weekly.csv")
         logger.info("Saved weekly FX features")
         
         return weekly
@@ -421,13 +421,13 @@ class FXAgent(PortfolioAgent):
         logger.info("Loading weekly FX data...")
         
         # Load or collect weekly data
-        if os.path.exists("data/fx_combined_features_weekly.csv"):
-            weekly = pd.read_csv("data/fx_combined_features_weekly.csv", index_col=0, parse_dates=True)
+        if os.path.exists("data/features/fx_combined_features_weekly.csv"):
+            weekly = pd.read_csv("data/features/fx_combined_features_weekly.csv", index_col=0, parse_dates=True)
         else:
             weekly = self.data_collector.collect_data(start_date, end_date)
 
         # Calculate baseline returns
-        daily = pd.read_csv("data/fx_combined_features_daily.csv", index_col=0, parse_dates=True)
+        daily = pd.read_csv("data/features/fx_combined_features_daily.csv", index_col=0, parse_dates=True)
         baseline = self.estimate_returns(daily, TICKERS).reindex(weekly.index)
         weekly = pd.concat([weekly, baseline], axis=1)
 
@@ -446,8 +446,9 @@ class FXAgent(PortfolioAgent):
 
         # Build and save final output
         final_df = self._build_output(preds, dates, weekly)
-        final_df.to_csv("data/fx_weekly_predictions.csv", index=False)
-        logger.info("FX predictions saved → data/fx_weekly_predictions.csv")
+        os.makedirs("data/predictions", exist_ok=True)
+        final_df.to_csv("data/predictions/fx_weekly_predictions.csv", index=False)
+        logger.info("FX predictions saved → data/predictions/fx_weekly_predictions.csv")
         
         return final_df
 

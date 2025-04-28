@@ -21,8 +21,8 @@ from src.config.settings import PORTFOLIOS
 # Define asset lists from settings
 fx_tickers = [entry["etf"] for entry in PORTFOLIOS['fx'].get("currencies", [])]
 fi_tickers = [entry["etf"] for entry in PORTFOLIOS['bond'].get("treasuries", [])]
-equity_tickers = [entry["etf"] for entry in PORTFOLIOS["equity"]["sectors"]]
-commodity_tickers = [entry["etf"] for entry in PORTFOLIOS["commodity"]["sectors"]]
+equity_tickers = [entry["etf"] for entry in PORTFOLIOS["equity"].get("sectors", [])]
+commodity_tickers = [entry["etf"] for entry in PORTFOLIOS["commodity"].get("sectors", [])]
 # -----------------------------------------------
 # Data loading function
 def load_data(asset_class="fx"):

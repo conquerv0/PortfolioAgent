@@ -170,8 +170,8 @@ class CommodityDataCollector(DataCollector):
         daily = daily[self.full_start_date:self.end_date]
         
         # Save daily features
-        os.makedirs("data", exist_ok=True)
-        daily.to_csv("data/commodity_combined_features_daily.csv")
+        os.makedirs("data/features", exist_ok=True)
+        daily.to_csv("data/features/commodity_combined_features_daily.csv")
         logger.info("Saved daily commodity features")
 
         # Resample to weekly and calculate additional features
@@ -182,7 +182,7 @@ class CommodityDataCollector(DataCollector):
                 
         # Filter by target date range and save
         weekly = weekly[self.target_start_date:self.end_date]
-        weekly.to_csv("data/commodity_combined_features_weekly.csv")
+        weekly.to_csv("data/features/commodity_combined_features_weekly.csv")
         logger.info("Saved weekly commodity features")
         
         return weekly
@@ -326,13 +326,13 @@ class CommodityAgent(PortfolioAgent):
         logger.info("Loading weekly commodity data...")
         
         # Load or collect weekly data
-        if os.path.exists("data/commodity_combined_features_weekly.csv"):
-            weekly = pd.read_csv("data/commodity_combined_features_weekly.csv", index_col=0, parse_dates=True)
+        if os.path.exists("data/features/commodity_combined_features_weekly.csv"):
+            weekly = pd.read_csv("data/features/commodity_combined_features_weekly.csv", index_col=0, parse_dates=True)
         else:
             weekly = self.data_collector.collect_data(start_date, end_date)
 
         # Calculate baseline returns
-        daily = pd.read_csv("data/commodity_combined_features_daily.csv", index_col=0, parse_dates=True)
+        daily = pd.read_csv("data/features/commodity_combined_features_daily.csv", index_col=0, parse_dates=True)
         baseline = self.estimate_returns(daily, TICKERS).reindex(weekly.index)
         weekly = pd.concat([weekly, baseline], axis=1)
 
@@ -351,8 +351,9 @@ class CommodityAgent(PortfolioAgent):
 
         # Build and save final output
         final_df = self._build_output(preds, dates, weekly)
-        final_df.to_csv("data/commodity_weekly_predictions.csv", index=False)
-        logger.info("Commodity predictions saved → data/commodity_weekly_predictions.csv")
+        os.makedirs("data/predictions", exist_ok=True)
+        final_df.to_csv("data/predictions/commodity_weekly_predictions.csv", index=False)
+        logger.info("Commodity predictions saved → data/predictions/commodity_weekly_predictions.csv")
         
         return final_df
 
