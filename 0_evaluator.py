@@ -165,7 +165,7 @@ if results:
     plt.gca().spines['right'].set_visible(False)
     
     plt.tight_layout()
-    plt.savefig(f'data/evaluation/{asset_class}_accuracy_by_confidence_bin.png')
+    plt.savefig(f'data/evaluation/{asset_class}/{asset_class}_accuracy_by_confidence_bin.png')
     
     # ---------------- Graph 2: Directional Accuracy by Ticker ----------------
     # Calculate average confidence and accuracy for each ticker
@@ -225,7 +225,7 @@ if results:
     plt.gca().spines['right'].set_visible(False)
     
     plt.tight_layout()
-    plt.savefig(f'data/evaluation/{asset_class}_directional_accuracy_by_ticker.png')
+    plt.savefig(f'data/evaluation/{asset_class}/{asset_class}_directional_accuracy_by_ticker.png')
     
     # Print statistics for reference
     print("\nETF Performance Statistics:")

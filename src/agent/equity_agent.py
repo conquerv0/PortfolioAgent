@@ -69,7 +69,16 @@ PREDICTION_SCHEMA = {
                         }
                     },
                     "required": ["instrument", "variance_view", "confidence", "rationale"],
-                    "additionalProperties": False
+                    "additionalProperties": False,
+                    "example":    {
+                    "predictions": 
+                        {
+                        "instrument":"Information Technology",
+                        "variance_view":0.0423,
+                        "confidence":0.85,
+                        "rationale":"INDPRO_weekly_change +0.035 & VIX_weekly_change −0.1 signal risk-off tilt, PCOPPUSDM_weekly_change -0.02 copper price reduction provides further stimulus on electronics market "
+                        },
+                    },
                 }
             },
             "overall_analysis": {
@@ -150,7 +159,7 @@ class EquityDataCollector(DataCollector):
         vol = self.calculate_historical_volatility(prices)
 
         features = pd.concat([prices, mom, ewma, vol, risk, macro], axis=1)
-
+        features = features.loc[:, ~features.columns.duplicated()].copy()
         features.index = pd.to_datetime(features.index)
         daily = features[self.full_start_date:self.end_date]
 
@@ -291,10 +300,10 @@ class EquityAgent(PortfolioAgent):
         where data are missing or NaN.
         """
         PROMPT_TEMPLATE = textwrap.dedent("""
-        Based only on the given data for week ending **{date}**:Some U.S. macro indicator changes, risk-sentiment proxy and sector-ETF adjusted_close prices, a baseline return estimated by a quantitative mode
-                                          and some technical features features of the etf returns of given period, predict your **variance_view** the alpha you expect above/below baseline 
+        Based only on the given data for a week:Some U.S. macro indicator changes, risk-sentiment proxy and sector-ETF adjusted_close prices, and baseline return estimated by a quantitative mode
+                                          and some technical features features of the etf returns of given period: 
 
-        ▌Macro snapshot
+        ▌Macro indicator changes
         • Industrial Production INDPRO…… {INDPRO_weekly_change:.2f}
         • Retail Sales ex-Food RSAFS…… {RSAFS_weekly_change:.2f}
         • Housing Starts HOUST…………… {HOUST_weekly_change:.2f}
@@ -328,7 +337,7 @@ class EquityAgent(PortfolioAgent):
 
         **Task**
         For every ETF provided above, please provide:
-        1. Your**variance_view** non-conservative, high conviction view on the alpha you expect above/below baseline weekly return based on the analysis for next week. a decimal, (ex. –0.001 means 10 bp below baseline, 0 implies neutral.)
+        1. Your**variance_view** , it should be a high conviction (can be aggressive, avoid neutral, conservative) view on the alpha you expect above/below baseline weekly return based on the analysis and reflect the relative outperformance or underperformance of the different ETF in the portfolio for next week as a decimal. 
         2. A confidence score between 0 and 1,
         3. A brief rationale for the prediction. reference the data we supplied. (ex. "INDPRO +0.6 % and VIX −12 % indicate risk-on rotation.")
         4. Provide an include a top-level field **overall_analysis** summarizing how the data inform your predictions.
@@ -367,7 +376,7 @@ class EquityAgent(PortfolioAgent):
                     {
                         "role": "system",
                         "content": (
-                            "You are an equity trading strategist. Provide 1-week return forecasts for "
+                            "You are an equity trading strategist. Provide 1-week alpha return forecast on top of the baseline return we provide, for "
                             "major GICS sector ETFs based on macro, risk-sentiment, price data and some technical signal."
                         ),
                     },
@@ -506,23 +515,24 @@ class EquityAgent(PortfolioAgent):
         return pd.DataFrame(records)
 
 if __name__ == "__main__":
-    start_date = "2022-11-31"
-    end_date = "2022-12-01"
+
 
     equity_portfolio = PORTFOLIOS["equity"]["sectors"]
     client = OpenAI(api_key=OPENAI_API_KEY)
 
+    start_date = "2023-11-01"
+    end_date = "2025-04-28"
+    full_start_date="2020-01-01"
+
     equity_data_collector = EquityDataCollector(
         portfolio=equity_portfolio,
-        full_start_date="2020-01-01", 
-        target_start_date="2023-11-01", 
-        end_date="2025-03-31")
+        full_start_date=full_start_date, 
+        target_start_date=start_date, 
+        end_date=end_date)
     
     equity_data_collector.collect_data(start_date, end_date)
     equity_agent = EquityAgent(data_collector=equity_data_collector, llm_client=client)
     
-    start_date = "2023-11-01"
-    end_date = "2025-03-31"
     
     result_df = equity_agent.run_pipeline(start_date, end_date)
     print("Equity Agent Predictions:")

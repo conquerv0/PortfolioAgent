@@ -10,10 +10,10 @@ from dateutil.relativedelta import relativedelta
 # ----- Global Parameters -----
 LOOKBACK_WEEKS = 4
 ROBUST_LOOKBACK_WEEKS = 260    # ≈ 5 years  (adjust as you like)
-UNCERTAINTY_SCALE = 0.2   # Scaling factor for view uncertainty
+UNCERTAINTY_SCALE = 0.8   # Scaling factor for view uncertainty
 EPSILON = 1e-4           # Small constant to avoid division by zero
 TAU = 0.2             # Scaling parameter for the prior covariance in BL
-RISK_AVERSION = 1       # Risk aversion parameter for mean-variance optimization
+RISK_AVERSION = 4       # Risk aversion parameter for mean-variance optimization
 RISK_FREE_RATE = 0.0
 
 # Mapping for FX instruments
@@ -49,8 +49,8 @@ def load_data(asset_class="fx"):
     """
     asset_class = asset_class.lower()
     try:
-        pred_file   = f"data/{asset_class}_weekly_predictions.csv"
-        actual_file = f"data/{asset_class}_combined_features_weekly.csv"
+        pred_file   = f"data/predictions/{asset_class}_weekly_predictions.csv"
+        actual_file = f"data/features/{asset_class}_combined_features_weekly.csv"
     except:
         raise ValueError("asset_class must be 'fx', 'fi', 'equity', or 'commodity'!")
     
@@ -161,7 +161,17 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
     
     results = []
     weights_history = []
-    
+    # 1) Compute static MV benchmark weights on the very first lookback
+    first_date = pred_pivot.index.min()
+    first_hist = actual_data[actual_data['date'] < first_date].tail(lookback_weeks)
+    if asset_class=="fi":
+        ret0 = first_hist[asset_list].dropna()
+    else:
+        ret0 = first_hist[asset_list].pct_change().dropna()
+    pi0    = ret0.mean().values.reshape(-1,1)
+    Sigma0 = ret0.cov().values
+    mv_weights = mean_variance_portfolio(Sigma0, pi0)        # static benchmark
+
     for current_date in pred_pivot.index:
         # Only use historical data strictly before current_date
         hist_data = actual_data[actual_data['date'] < current_date]
@@ -254,18 +264,22 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
             next_returns = np.array(next_returns)
             
         next_returns = np.clip(next_returns, -0.5, 0.5)
-        
+        mv_weights_t = mean_variance_portfolio(Sigma, pi)
+        print(mv_weights_t)
+        mv_port_return = (mv_weights_t.flatten() @ next_returns)
         bl_port_return = float(bl_weights.T @ next_returns.reshape(-1, 1))
         eq_port_return = float(eq_weights.T @ next_returns.reshape(-1, 1))
+        # mv_port_return = float(mv_weights.T @ next_returns.reshape(-1, 1))
         
         results.append({
             'date': current_date,
             'bl_portfolio_return': bl_port_return,
-            'equal_weighted_return': eq_port_return
+            'equal_weighted_return': eq_port_return,
+            'mv_portfolio_return': mv_port_return
         })
     
     if not results:
-        return pd.DataFrame(columns=['date', 'bl_portfolio_return', 'equal_weighted_return']), []
+        return pd.DataFrame(columns=['date', 'bl_portfolio_return', 'equal_weighted_return', 'mv_portfolio_return']), []
     
     results_df = pd.DataFrame(results)
     results_df['date'] = pd.to_datetime(results_df['date'])
@@ -323,13 +337,14 @@ def plot_cumulative_returns(results_df, asset_class):
 
     results_df['bl_cum_return'] = (1 + results_df['bl_portfolio_return']).cumprod() - 1
     results_df['eq_cum_return'] = (1 + results_df['equal_weighted_return']).cumprod() - 1
-
+    results_df['mv_cum_return'] = (1 + results_df['mv_portfolio_return']).cumprod() - 1
     plt.figure(figsize=(12, 6))
     plt.plot(results_df['date'], results_df['bl_cum_return'], label='BL Portfolio', marker='o')
     plt.plot(results_df['date'], results_df['eq_cum_return'], label='Equal-Weighted Portfolio', linestyle='--')
+    plt.plot(results_df['date'], results_df['mv_cum_return'], label='Static MV Benchmark', linestyle='-.')
     plt.xlabel('Date')
     plt.ylabel('Cumulative Return')
-    plt.title(f'{asset_class} Cumulative Returns: BL Portfolio vs Equal-Weighted Portfolio')
+    plt.title(f'{asset_class} Cumulative Returns Comparison')
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
@@ -341,7 +356,7 @@ def plot_cumulative_returns(results_df, asset_class):
 # Main function
 def main():
     # Change asset_class to "fx", "fi", "equity", or "commodity" as needed
-    asset_class = "fx"  # or "fi", "equity", "commodity" for other asset classes
+    asset_class = "equity"  # or "fi", "equity", "commodity" for other asset classes
     predictions, actual_data = load_data(asset_class=asset_class)
     
     if asset_class == "fx":
