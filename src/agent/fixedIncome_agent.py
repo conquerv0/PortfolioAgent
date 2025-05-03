@@ -352,7 +352,7 @@ class FixedIncomeAgent(PortfolioAgent):
         """
         # 1) EWMA of daily returns
         ewma_daily = daily_ret_df[tickers].ewm(span=span_days, adjust=False).mean()
-        # 2) take last EWMA on each Friday as the “expected” weekly return
+        # 2) take last EWMA on each Friday as the "expected" weekly return
         weekly_baseline = ewma_daily.resample('W-FRI').last()
         # 3) rename columns
         weekly_baseline.columns = [f"{tck}_baseline_ret" for tck in tickers]
@@ -454,7 +454,7 @@ class FixedIncomeAgent(PortfolioAgent):
         Each baseline_ret is the **expected 1-week total return** (decimal).
         Return variance_view in the *same* units (weekly total return).
                                           
-        Do **NOT** adjust the baseline yourself – we’ll add it afterwards.
+        Do **NOT** adjust the baseline yourself – we'll add it afterwards.
         Include a top-level field **overall_analysis**.
                                           
         Respond **only** with valid JSON conforming to the provided schema.
@@ -587,7 +587,6 @@ class FixedIncomeAgent(PortfolioAgent):
                     "baseline_return":  baseline,
                     "variance_view":    variance,
                     "predicted_return": pred_ret,
-                    "predicted_volatility": inst.get("predicted_volatility"),
                     "confidence":       inst.get("confidence"),
                     "rationale":        inst.get("rationale", ""),
                     "overall_analysis": overall
