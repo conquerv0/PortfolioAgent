@@ -468,7 +468,7 @@ class EquityAgent(PortfolioAgent):
         # baseline_w  = self.estimate_returns(data_d[tickers], tickers)             # <- ewma_1m
         baseline_w  = self.estimate_returns_ARIMA(data_d[tickers], tickers)       # <- arima_1w
         baseline_w   = baseline_w.reindex(data_w.index)
-        data_w      = pd.concat([data_w, baseline_w], axis=1)
+        data_w      = pd.concat([data_w, baseline_w], axis=1).dropna()
 
         # ── 2.  main loop  ───────────────────────────────────────────────
         predictions, dates = [], []

@@ -10,12 +10,12 @@ from dateutil.relativedelta import relativedelta
 # ----- Global Parameters -----
 LOOKBACK_WEEKS = 4
 ROBUST_LOOKBACK_WEEKS = 260    # ≈ 5 years  (adjust as you like)
-UNCERTAINTY_SCALE = 0.8   # Scaling factor for view uncertainty
+UNCERTAINTY_SCALE = 0.5  # Scaling factor for view uncertainty
 EPSILON = 1e-4           # Small constant to avoid division by zero
-TAU = 0.2             # Scaling parameter for the prior covariance in BL
-RISK_AVERSION = 4       # Risk aversion parameter for mean-variance optimization
-RISK_FREE_RATE = 0.0
-
+TAU = 0.5            # Scaling parameter for the prior covariance in BL
+RISK_AVERSION = 2       # Risk aversion parameter for mean-variance optimization
+RISK_FREE_RATE = 0.03
+LAMBDA_ = 0.7
 # Mapping for FX instruments
 fx_instrument_to_etf = {
     "EUR/USD": "FXE",
@@ -81,6 +81,49 @@ def mean_variance_portfolio(Sigma, expected_returns, risk_aversion=RISK_AVERSION
     if norm_factor < EPSILON:
         return np.ones_like(raw_weights) / len(raw_weights)
     return raw_weights / norm_factor
+
+def mean_variance_portfolio_long_only(Sigma: np.ndarray, mu: np.ndarray, epsilon: float = 1e-8) -> np.ndarray:
+    """
+    Long‐only mean‐variance portfolio.
+    
+    Args:
+      Sigma: (N×N) covariance matrix.
+      mu:    (N,) vector of expected returns.
+      epsilon: small threshold to avoid divide‐by‐zero.
+    
+    Returns:
+      w: (N,) weights ≥0 summing to 1.
+    """
+    # 1) Raw (unconstrained) weights ∝ Σ⁻¹ μ
+    inv_S = np.linalg.inv(Sigma)
+    raw   = inv_S @ mu
+
+    # 2) Force long‐only
+    clipped = np.clip(raw, 0.0, None)
+
+    # 3) Renormalize to 100% net exposure
+    total = clipped.sum()
+    if total < epsilon:
+        # If no positive signal, default to equal‐weight
+        return np.ones_like(clipped) / len(clipped)
+
+    return clipped / total
+
+def mean_variance_portfolio_full_enforced(Sigma, expected_returns, risk_aversion=RISK_AVERSION):
+    """
+    Σ⁻¹ π  →  raw_weights
+    then scale so sum(raw_weights)=1 exactly.
+    """
+    inv_Sigma   = inv(Sigma)
+    raw_weights = inv_Sigma @ expected_returns
+
+    total = raw_weights.sum()
+    if abs(total) < EPSILON:
+        # if the raw signal is basically zero, fall back to equal weight
+        n = len(raw_weights)
+        return np.ones((n,1)) / n
+
+    return raw_weights / total
 
 # -----------------------------------------------
 # Black-Litterman update function
@@ -201,10 +244,9 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
                                     asset_list,
                                     robust_start_date,
                                     current_date.strftime("%Y-%m-%d"))
-        lambda_ = 0.7
-        Sigma = lambda_*Sigma_short + (1-lambda_)*Sigma_long         # or λ-blend of your choice
+        lambda_ = LAMBDA_
+        Sigma = lambda_*Sigma_short + (1-lambda_)*Sigma_long         # or λ-blend of choice
 
-        # >>> add safety lines here <<<
         Sigma = np.nan_to_num(Sigma)
         Sigma = 0.5*(Sigma + Sigma.T)      # force symmetry
         base   = np.trace(Sigma)/Sigma.shape[0]
@@ -229,7 +271,8 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
         # Update expected returns via BL
         updated_returns = black_litterman_update(pi, Sigma, q, confidences)
         # bl_weights = max_sharpe_portfolio(Sigma, updated_returns, risk_free_rate=RISK_FREE_RATE)
-        bl_weights = mean_variance_portfolio(Sigma, updated_returns, risk_aversion=RISK_AVERSION)
+        # bl_weights = mean_variance_portfolio_full_enforced(Sigma, updated_returns, risk_aversion=RISK_AVERSION)
+        bl_weights = mean_variance_portfolio_long_only(Sigma, updated_returns)
         weights_history.append(bl_weights.flatten())
         
         n = len(asset_list)
@@ -356,7 +399,7 @@ def plot_cumulative_returns(results_df, asset_class):
 # Main function
 def main():
     # Change asset_class to "fx", "fi", "equity", or "commodity" as needed
-    asset_class = "equity"  # or "fi", "equity", "commodity" for other asset classes
+    asset_class = "equity"  
     predictions, actual_data = load_data(asset_class=asset_class)
     
     if asset_class == "fx":

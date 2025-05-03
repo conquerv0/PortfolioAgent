@@ -519,10 +519,10 @@ class FixedIncomeAgent(PortfolioAgent):
 
         # ── 1.  add baseline_ret columns  ─────────────────────────────────
         tickers     = [p["etf"] for p in PORTFOLIOS["bond"]["treasuries"]]
-        # baseline_w  = self.estimate_returns(data_d[tickers], tickers)             # <- ewma_1m
-        baseline_w  = self.estimate_returns(data_d[tickers], tickers)       # <- arima_1w
+        baseline_w  = self.estimate_returns(data_d[tickers], tickers, span_days=260)             # <- ewma_1m
+        # baseline_w  = self.estimate_returns_ARIMA(data_d[tickers], tickers)       # <- arima_1w
         baseline_w   = baseline_w.reindex(data_w.index)
-        data      = pd.concat([data_w, baseline_w], axis=1)
+        data_w      = pd.concat([data_w, baseline_w], axis=1)
 
         # ── 2.  main loop  ───────────────────────────────────────────────
         predictions, dates = [], []
