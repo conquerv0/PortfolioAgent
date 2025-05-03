@@ -5,6 +5,54 @@ import os
 # 1.  CONFIG & DATA
 # ------------------------------------------------------------------
 from src.config.settings import PORTFOLIOS  
+def load_bond_etf_returns(filepath: str) -> pd.DataFrame:
+    """
+    Load bond ETF data from a CSV file and compute the full daily return for each ETF.
+    
+    The CSV file is expected to have at least the following columns:
+        - date: Trading date
+        - ticker: ETF ticker
+        - prc: Price (which may be negative for adjustments)
+        - ret: Daily price return (as a decimal)
+        - divamt: Dividend (or coupon) cash amount
+        - vwretd: Value-weighted total return (includes distributions)
+        
+    The function computes:
+        dividend_yield = divamt / abs(prc)   if prc is nonzero, else 0.
+        full_return = vwretd (if available) else ret + dividend_yield.
+    
+    The final DataFrame is pivoted so that the row index is the date and the columns are the ticker names.
+    
+    Parameters:
+        filepath (str): Path to the CSV file.
+    
+    Returns:
+        pd.DataFrame: Daily full return DataFrame with date as index and ticker as columns.
+    """
+    # Load the CSV file; ensure the date column is parsed as datetime.
+    df = pd.read_csv(filepath, parse_dates=['date'])
+    
+    # Ensure the required columns are present.
+    required_columns = ['date', 'ticker', 'prc', 'ret', 'divamt', 'vwretd']
+    missing = [col for col in required_columns if col not in df.columns]
+    if missing:
+        raise ValueError("Missing required columns: " + ", ".join(missing))
+    
+    # Compute dividend yield when price is nonzero.
+    df['dividend_yield'] = df.apply(lambda row: row['divamt'] / abs(row['prc']) if row['prc'] != 0 else 0, axis=1)
+    
+    # Compute full return:
+    # If vwretd is available (non-null), use it; otherwise, add the dividend yield to the price return.
+    df['computed_return'] = df.apply(
+        lambda row: row['vwretd'] if pd.notnull(row['vwretd']) else (row['ret'] + row['dividend_yield']),
+        axis=1
+    )
+    
+    # Pivot the DataFrame so that 'date' becomes the index and each ticker is a column.
+    full_return_df = df.pivot(index='date', columns='ticker', values='computed_return')
+    full_return_df.fillna(0, inplace=True)
+    
+    return full_return_df
 
 asset_class = "fi"  # fx, equity, fi, commodity
 PRED_FILE   = f"data/predictions/{asset_class}_weekly_predictions.csv"  
@@ -26,7 +74,7 @@ elif asset_class == "commodity":
 else:
     raise ValueError("Unsupported asset class")
 
-# date range that matches your back-test:
+# date range that matches back-test:
 START, END = "2023-11-03", "2025-03-28"
 
 # predictions  → wide matrix
@@ -35,14 +83,24 @@ pred = (pd.read_csv(PRED_FILE, parse_dates=["date"])
           .loc[START:END, TICKERS]
           .astype(float))
 
+
 # realised weekly return for NEXT week
 if PRICE_FILE and os.path.exists(PRICE_FILE):
     px = pd.read_csv(PRICE_FILE, index_col=0, parse_dates=True)[TICKERS]
 else:                                                                        # fallback
     px = yf.download(TICKERS, start=START, end=END, auto_adjust=True)["Adj Close"]
 
-weekly_px = px.resample("W-FRI").last().loc[START:END]
-realised  = weekly_px.pct_change().shift(-1).loc[pred.index]
+if asset_class == "fi":
+    daily = load_bond_etf_returns('data/bond_etf.csv')  # index=date, cols=tickers
+    # restrict to our window
+    daily = daily.loc[START:END, TICKERS]
+    
+    # 2) compound into weekly returns (Fri close to Fri close)
+    weekly = (daily + 1.0).resample("W-FRI").prod().sub(1.0)
+    
+    # align with next‑week forecast
+    # if pred_df is prediction for week t→t+1, we shift weekly returns up
+    realised = weekly.shift(-1).reindex(pred.index).fillna(0)
 
 # ------------------------------------------------------------------
 # 2.  DIRECTIONAL & ERROR METRICS
@@ -269,3 +327,4 @@ plt.plot(avg_real, label='Realised', alpha=.7)
 plt.axhline(0, ls='--', c='grey', lw=.6)
 plt.title(f'Weekly Return (lag = {BEST_LAG})')
 plt.legend()
+
