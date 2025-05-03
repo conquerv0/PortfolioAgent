@@ -8,14 +8,15 @@ from src.agent.DataCollector import *
 from dateutil.relativedelta import relativedelta
 
 # ----- Global Parameters -----
-LOOKBACK_WEEKS = 4
-ROBUST_LOOKBACK_WEEKS = 260    # ≈ 5 years  (adjust as you like)
-UNCERTAINTY_SCALE = 0.5  # Scaling factor for view uncertainty
-EPSILON = 1e-4           # Small constant to avoid division by zero
+LOOKBACK_WEEKS = 12
+ROBUST_LOOKBACK_WEEKS = 260    # ≈ 5 years  (adjust as needed
+UNCERTAINTY_SCALE = 0.8  # Scaling factor for view uncertainty
+EPSILON = 1e-6           # Small constant to avoid division by zero
 TAU = 0.5            # Scaling parameter for the prior covariance in BL
 RISK_AVERSION = 2       # Risk aversion parameter for mean-variance optimization
 RISK_FREE_RATE = 0.03
-LAMBDA_ = 0.7
+LAMBDA_ = 0.1
+MAX_TURNOVER = 0.2
 # Mapping for FX instruments
 fx_instrument_to_etf = {
     "EUR/USD": "FXE",
@@ -125,6 +126,24 @@ def mean_variance_portfolio_full_enforced(Sigma, expected_returns, risk_aversion
 
     return raw_weights / total
 
+def apply_turnover(prev_w: np.ndarray,
+                   target_w: np.ndarray,
+                   max_turnover: float = MAX_TURNOVER,
+                   eps: float = 1e-8) -> np.ndarray:
+    """
+    If sum(|Δw|) > max_turnover,
+    scale Δw = target_w - prev_w by α = max_turnover / sum(|Δw|)
+    to satisfy the cap, else move fully to target.
+    Always returns a vector summing to 1.
+    """
+    delta = target_w - prev_w
+    total_turn = np.abs(delta).sum()
+    if total_turn <= max_turnover or total_turn < eps:
+        return target_w
+    alpha = max_turnover / total_turn
+    w_new = prev_w + alpha * delta
+    # numerical fixup: ensure sums to 1
+    return w_new / w_new.sum()
 # -----------------------------------------------
 # Black-Litterman update function
 def black_litterman_update(pi, Sigma, q, confidences, tau=TAU, uncertainty_scale=UNCERTAINTY_SCALE, epsilon=EPSILON):
@@ -178,6 +197,57 @@ def robust_covariance_estimation(tickers, robust_start_date, end_date):
     pi    = weekly_ret.mean().values.reshape(-1,1)
     return Sigma, pi
 
+import cvxpy as cp
+
+import numpy as np
+import cvxpy as cp
+
+def bl_weights_with_turnover(pi, Sigma, q, confidences,
+                             prev_w,
+                             tau=TAU,
+                             uncertainty_scale=UNCERTAINTY_SCALE,
+                             risk_aversion=RISK_AVERSION,
+                             turnover_penalty=MAX_TURNOVER,
+                             reg_eps=1e-6):
+    """
+    Compute BL posterior returns (μ) via black_litterman_update (as in :contentReference[oaicite:0]{index=0}:contentReference[oaicite:1]{index=1}),
+    then solve
+        maximize  wᵀμ – (risk_aversion/2) wᵀΣw  – turnover_penalty·‖w–prev_w‖₁
+        subject to  ∑w=1,  w≥0.
+    Returns new weight vector of shape (n,1).
+    """
+    # 1) Compute BL posterior returns μ
+    mu = black_litterman_update(pi, Sigma, q, confidences,
+                                tau=tau,
+                                uncertainty_scale=uncertainty_scale).flatten()
+    
+    # 2) Regularize Σ to ensure positive‐definiteness
+    n = Sigma.shape[0]
+    Sigma_reg = 0.5*(Sigma + Sigma.T) + reg_eps*np.eye(n)
+    
+    # 3) Setup CVXPY variables
+    w = cp.Variable(n)
+    ret_term  = mu @ w
+    risk_term = (risk_aversion/2)*cp.quad_form(w, Sigma_reg)
+    turn_term = turnover_penalty * cp.norm1(w - prev_w.flatten())
+    
+    # 4) Define and solve the QP
+    objective = cp.Maximize(ret_term - risk_term - turn_term)
+    constraints = [cp.sum(w) == 1, w >= 0]
+    prob = cp.Problem(objective, constraints)
+    try:
+        prob.solve(solver=cp.OSQP, warm_start=True)
+    except cp.error.SolverError:
+        # fallback if OSQP fails
+        prob.solve(solver=cp.ECOS, verbose=False)
+    
+    # 5) Handle solver failure
+    if w.value is None:
+        # if both solvers fail, stick with previous weights
+        return prev_w
+    return w.value.reshape(-1,1)
+
+
 # -----------------------------------------------
 # Rolling backtest pipeline
 def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", lookback_weeks=LOOKBACK_WEEKS):
@@ -213,7 +283,7 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
         ret0 = first_hist[asset_list].pct_change().dropna()
     pi0    = ret0.mean().values.reshape(-1,1)
     Sigma0 = ret0.cov().values
-    mv_weights = mean_variance_portfolio(Sigma0, pi0)        # static benchmark
+    prev_w = mean_variance_portfolio(Sigma0, pi0)        # static benchmark
 
     for current_date in pred_pivot.index:
         # Only use historical data strictly before current_date
@@ -235,8 +305,7 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
         
         pi = returns_lookback.mean().values.reshape(-1, 1)
         # Sigma = returns_lookback.cov().values
-        # inside rolling_bl_backtest, before BL update
-        # rolling_bl_backtest, right after you create Sigma
+
         Sigma_short = returns_lookback.cov().values
         robust_start_date = (pd.to_datetime(current_date)
                      - pd.Timedelta(weeks=ROBUST_LOOKBACK_WEEKS)).strftime("%Y-%m-%d")
@@ -268,12 +337,26 @@ def rolling_bl_backtest(predictions, actual_data, asset_list, asset_class="fx", 
         
         confidences = conf_pivot.loc[current_date, asset_list].values
         
+        prev_w = mean_variance_portfolio(Sigma, pi)
         # Update expected returns via BL
         updated_returns = black_litterman_update(pi, Sigma, q, confidences)
         # bl_weights = max_sharpe_portfolio(Sigma, updated_returns, risk_free_rate=RISK_FREE_RATE)
-        # bl_weights = mean_variance_portfolio_full_enforced(Sigma, updated_returns, risk_aversion=RISK_AVERSION)
-        bl_weights = mean_variance_portfolio_long_only(Sigma, updated_returns)
+        target_bl_weights = mean_variance_portfolio_full_enforced(Sigma, updated_returns, risk_aversion=RISK_AVERSION)
+        # bl_weights = mean_variance_portfolio_long_only(Sigma, updated_returns)
+        
+        bl_weights = apply_turnover(prev_w, target_bl_weights)
+        # bl_weights = bl_weights_with_turnover(
+        #     pi, Sigma, q, confidences,
+        #     prev_w=prev_w,
+        #     tau=TAU,
+        #     uncertainty_scale=UNCERTAINTY_SCALE,
+        #     risk_aversion=RISK_AVERSION,
+        #     turnover_penalty=MAX_TURNOVER
+        # )
+
+        prev_w = bl_weights
         weights_history.append(bl_weights.flatten())
+        
         
         n = len(asset_list)
         eq_weights = np.ones((n, 1)) / n
