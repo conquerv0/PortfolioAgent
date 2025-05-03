@@ -392,14 +392,14 @@ def plot_cumulative_returns(results_df, asset_class):
     plt.grid(True)
     plt.tight_layout()
     os.makedirs('data/evaluation', exist_ok=True)
-    plt.savefig(f'data/evaluation/{asset_class}_cumulative_returns.png')
+    plt.savefig(f'data/evaluation/{asset_class}/{asset_class}_cumulative_returns.png')
     plt.show()
 
 # -----------------------------------------------
 # Main function
 def main():
     # Change asset_class to "fx", "fi", "equity", or "commodity" as needed
-    asset_class = "equity"  
+    asset_class = "fi"  
     predictions, actual_data = load_data(asset_class=asset_class)
     
     if asset_class == "fx":
@@ -419,7 +419,7 @@ def main():
         return
     
     os.makedirs('data/evaluation', exist_ok=True)
-    results_df.to_csv(f'data/evaluation/{asset_class}_portfolio_returns_backtest.csv', index=False)
+    results_df.to_csv(f'data/evaluation/{asset_class}/{asset_class}_portfolio_returns_backtest.csv', index=False)
     plot_cumulative_returns(results_df, asset_class)
     
     # Calculate performance metrics for the BL portfolio returns

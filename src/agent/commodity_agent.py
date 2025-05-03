@@ -194,8 +194,8 @@ class CommodityAgent(PortfolioAgent):
     def __init__(self, data_collector: CommodityDataCollector, llm_client: OpenAI):
         super().__init__("CommodityAgent", data_collector, llm_client)
 
-    # ---------------- Baseline estimation (EWMA 20d) ----------------
-    def estimate_returns(self, daily_px: pd.DataFrame, tickers: List[str], span_days: int = 20):
+    # ---------------- Baseline estimation (EWMA 1M) ----------------
+    def estimate_returns(self, daily_px: pd.DataFrame, tickers: List[str], span_days: int = 21):
         """Calculate baseline returns using EWMA of daily returns."""
         # Ensure all tickers are in the dataframe
         available_tickers = [t for t in tickers if t in daily_px.columns]

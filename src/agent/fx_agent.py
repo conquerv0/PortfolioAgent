@@ -62,10 +62,6 @@ PREDICTION_SCHEMA = {
                             "type": "number",
                             "description": "Alpha adjustment vs. baseline return (decimal)"
                         },
-                        "predicted_volatility": {
-                            "type": "number",
-                            "description": "Predicted volatility (decimal)"
-                        },
                         "confidence": {
                             "type": "number",
                             "description": "Confidence 0-1"
@@ -75,7 +71,7 @@ PREDICTION_SCHEMA = {
                             "description": "Brief rationale"
                         }
                     },
-                    "required": ["instrument", "variance_view", "predicted_volatility", "confidence", "rationale"],
+                    "required": ["instrument", "variance_view", "confidence", "rationale"],
                     "additionalProperties": False
                 }
             },
@@ -320,9 +316,8 @@ class FXAgent(PortfolioAgent):
         ▌Task
         For each currency pair, provide:
         1. variance_view: alpha vs baseline weekly return (decimal)
-        2. predicted_volatility: expected volatility for next week (decimal)
-        3. confidence: 0 to 1
-        4. rationale (1 sentence)
+        2. confidence: 0 to 1
+        3. rationale (1 sentence)
         Add overall_analysis summarizing the key drivers.
 
         IMPORTANT: Your predictions should align with current volatility. In higher volatility regimes, your variance_view should be more aggressive (larger magnitude) and not too conservative. Use the volatility metrics as a guide for how bold your predictions should be.
@@ -406,7 +401,6 @@ class FXAgent(PortfolioAgent):
                     {
                         "instrument": s, 
                         "variance_view": 0.0,
-                        "predicted_volatility": 0.0,
                         "confidence": 0.0, 
                         "rationale": f"Error {e}"
                     } for s in CURRENCY_PAIRS
@@ -478,7 +472,6 @@ class FXAgent(PortfolioAgent):
                     "baseline_return": baseline,
                     "variance_view": variance,
                     "predicted_return": baseline + variance,
-                    "predicted_volatility": inst["predicted_volatility"],
                     "confidence": inst["confidence"],
                     "rationale": inst["rationale"],
                     "overall_analysis": overall

@@ -6,7 +6,7 @@ import os
 # ------------------------------------------------------------------
 from src.config.settings import PORTFOLIOS  
 
-asset_class = "fi"  # fx, equity, fi, commodity
+asset_class = "fx"  # fx, equity, fi, commodity
 PRED_FILE   = f"data/predictions/{asset_class}_weekly_predictions.csv"  
 PRICE_FILE  = f"data/features/{asset_class}_combined_features_weekly.csv"       # already saved
 fx_tickers = [entry["etf"] for entry in PORTFOLIOS['fx'].get("currencies", [])]

@@ -469,7 +469,7 @@ def main():
         print(f"Directional Accuracy: {vol_metrics.get('Directional Accuracy', 'N/A'):.4f}")
         print(f"Average Confidence: {eval_df.dropna(subset=['predicted_volatility', 'actual_volatility'])['confidence'].mean():.4f}")
     else:
-        print("\nNo volatility prediction data available for analysis")
+        print("\nNote: Volatility prediction has been removed from the model")
     
     print("\nEvaluation complete. Results saved to 'data/evaluation/' directory")
 
