@@ -66,7 +66,7 @@ PREDICTION_SCHEMA = {
                         },
                         "rationale": {
                             "type": "string",
-                            "description": "Brief rationale"
+                            "description": "Brief rationale referencing the data provided"
                         }
                     },
                     "required": ["instrument", "variance_view", "confidence", "rationale"],
@@ -428,7 +428,7 @@ class EquityAgent(PortfolioAgent):
                 "instruments": [
                     {
                         "instrument": name,
-                        "predicted_return": None,
+                        "variance_view": None,
                         "confidence": 0,
                         "rationale": f"Error: {str(e)}",
                     }
@@ -495,7 +495,7 @@ class EquityAgent(PortfolioAgent):
         print(f"Weekly equity predictions saved to '{final_path}'")
 
         # raw JSON (optional – keeps whole LLM response)
-        pd.DataFrame({"date": dates, "predictions": predictions}).to_json("data/equity_weekly_predictions_raw.json", orient="records")
+        pd.DataFrame({"date": dates, "predictions": predictions}).to_json("data/predictions/equity_weekly_predictions_raw.json", orient="records")
 
         return final_df
 
