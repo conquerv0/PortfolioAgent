@@ -1,10 +1,18 @@
+#!/usr/bin/env python
 import pandas as pd, numpy as np, yfinance as yf, matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import os
+import sys
+
+# Add the parent directory to the path so we can import the config module
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config.settings import PORTFOLIOS  
+
+
 # ------------------------------------------------------------------
 # 1.  CONFIG & DATA
 # ------------------------------------------------------------------
-from src.config.settings import PORTFOLIOS  
+
 def load_bond_etf_returns(filepath: str) -> pd.DataFrame:
     """
     Load bond ETF data from a CSV file and compute the full daily return for each ETF.

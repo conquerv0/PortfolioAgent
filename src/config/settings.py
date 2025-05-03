@@ -33,27 +33,8 @@ PORTFOLIOS = {
                 {"name": "Real Estate", "etf": "XLRE", "weight": 0.0},
                 {"name": "Materials", "etf": "XLB", "weight": 0.0},
             ],
-            "single_names": [
-                {"ticker": "AAPL", "name": "Apple Inc.", "weight": 0.0},
-                {"ticker": "MSFT", "name": "Microsoft Corp.", "weight": 0.0},
-                {"ticker": "JPM", "name": "JPMorgan Chase", "weight": 0.0},
-                {"ticker": "UNH", "name": "UnitedHealth Group", "weight": 0.0},
-                {"ticker": "NVDA", "name": "NVIDIA Corp.", "weight": 0.0},
-                {"ticker": "PG", "name": "Procter & Gamble", "weight": 0.0},
-                {"ticker": "TSLA", "name": "Tesla Inc.", "weight": 0.0},
-                {"ticker": "XOM", "name": "ExxonMobil", "weight": 0.0},
-                {"ticker": "HD", "name": "Home Depot", "weight": 0.0},
-                {"ticker": "VZ", "name": "Verizon Communications", "weight": 0.0}
-            ],
-            "factors": [
-                {"name": "Value", "etf": "VLUE", "weight": 0.0},
-                {"name": "Momentum", "etf": "MTUM", "weight": 0.0},
-                {"name": "Quality", "etf": "QUAL", "weight": 0.0},
-                {"name": "Low Volatility", "etf": "USMV", "weight": 0.0},
-                {"name": "Size", "etf": "IJR", "weight": 0.0},
-                {"name": "Growth", "etf": "IWF", "weight": 0.0}
-            ]
-        },
+    },
+
     # Bond maturity buckets and credit quality segments
     "bond": {
         "treasuries": [
@@ -86,11 +67,11 @@ PORTFOLIOS = {
     # G5 currencies
     "fx": {
         "currencies": [
-            {"name": "EUR/USD", "etf": "FXE", "weight": 0.2},
-            {"name": "GBP/USD", "etf": "FXB", "weight": 0.2},
-            {"name": "USD/JPY", "etf": "FXY", "weight": 0.2},
-            {"name": "USD/CHF", "etf": "FXF", "weight": 0.2},
-            {"name": "USD/CAD", "etf": "FXC", "weight": 0.2},
+            {"name": "EUR/USD", "etf": "FXE", "weight": 0.0},
+            {"name": "GBP/USD", "etf": "FXB", "weight": 0.0},
+            {"name": "USD/JPY", "etf": "FXY", "weight": 0.0},
+            {"name": "USD/CHF", "etf": "FXF", "weight": 0.0},
+            {"name": "USD/CAD", "etf": "FXC", "weight": 0.0},
         ],
     }
 }

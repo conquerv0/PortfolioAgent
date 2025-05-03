@@ -36,5 +36,3 @@ ENV/
 *.swp
 *.swo 
 
-# Test Functions
-codes/fx_ensemble_prediction.py

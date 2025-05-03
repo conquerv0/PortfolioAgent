@@ -1,11 +1,18 @@
 #!/usr/bin/env python
 import pandas as pd
 import numpy as np
+import cvxpy as cp
 from numpy.linalg import inv, eigvalsh   # h = Hermitian
 import matplotlib.pyplot as plt
 import os
-from src.agent.DataCollector import *
+import sys
+
+# Add the parent directory to the path so we can import the config module
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from agent.DataCollector import *
 from dateutil.relativedelta import relativedelta
+
 
 # ----- Global Parameters -----
 LOOKBACK_WEEKS = 12
@@ -17,21 +24,14 @@ RISK_AVERSION = 2       # Risk aversion parameter for mean-variance optimization
 RISK_FREE_RATE = 0.03
 LAMBDA_ = 0.1
 MAX_TURNOVER = 0.2
-# Mapping for FX instruments
-fx_instrument_to_etf = {
-    "EUR/USD": "FXE",
-    "GBP/USD": "FXB",
-    "USD/JPY": "FXY",
-    "USD/CHF": "FXF",
-    "USD/CAD": "FXC"
-}
+
 from src.config.settings import PORTFOLIOS  
 
 # Define asset lists from settings
 fx_tickers = [entry["etf"] for entry in PORTFOLIOS['fx'].get("currencies", [])]
 fi_tickers = [entry["etf"] for entry in PORTFOLIOS['bond'].get("treasuries", [])]
-equity_tickers = [entry["etf"] for entry in PORTFOLIOS["equity"]["sectors"]]
-commodity_tickers = [entry["etf"] for entry in PORTFOLIOS["commodity"]["sectors"]]
+equity_tickers = [entry["etf"] for entry in PORTFOLIOS["equity"].get("sectors", [])]
+commodity_tickers = [entry["etf"] for entry in PORTFOLIOS["commodity"].get("sectors", [])]
 # -----------------------------------------------
 # Data loading function
 def load_data(asset_class="fx"):
@@ -197,10 +197,7 @@ def robust_covariance_estimation(tickers, robust_start_date, end_date):
     pi    = weekly_ret.mean().values.reshape(-1,1)
     return Sigma, pi
 
-import cvxpy as cp
 
-import numpy as np
-import cvxpy as cp
 
 def bl_weights_with_turnover(pi, Sigma, q, confidences,
                              prev_w,
