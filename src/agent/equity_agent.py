@@ -287,7 +287,7 @@ class EquityAgent(PortfolioAgent):
 
     #     return formatted_prompt
 
-    def estimate_returns(self, daily_px, tickers, span_days=20):
+    def estimate_returns(self, daily_px, tickers, span_days=21):
         daily_ret = daily_px[tickers].pct_change()
         ewma      = daily_ret.ewm(span=span_days).mean()
         alpha_w   = ewma.resample('W-FRI').last()    # value known on Fri t
