@@ -10,6 +10,7 @@ import sys
 # Add the parent directory to the path so we can import the config module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from config.settings import PORTFOLIOS  
 from agent.DataCollector import *
 from dateutil.relativedelta import relativedelta
 
@@ -25,7 +26,6 @@ RISK_FREE_RATE = 0.03
 LAMBDA_ = 0.1
 MAX_TURNOVER = 0.2
 
-from src.config.settings import PORTFOLIOS  
 
 # Define asset lists from settings
 fx_tickers = [entry["etf"] for entry in PORTFOLIOS['fx'].get("currencies", [])]
@@ -479,7 +479,7 @@ def plot_cumulative_returns(results_df, asset_class):
 # Main function
 def main():
     # Change asset_class to "fx", "fi", "equity", or "commodity" as needed
-    asset_class = "fi"  
+    asset_class = "commodity"  
     predictions, actual_data = load_data(asset_class=asset_class)
     
     if asset_class == "fx":
