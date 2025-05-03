@@ -14,6 +14,7 @@ from fredapi import Fred
 from PortfolioAgent import *
 from DataCollector import *
 import textwrap
+from statsmodels.tsa.arima.model import ARIMA
 from string import Formatter
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -293,6 +294,38 @@ class EquityAgent(PortfolioAgent):
         alpha_w.columns = [f"{c}_baseline_ret" for c in alpha_w.columns]
         return alpha_w
 
+    def estimate_returns_ARIMA(self, daily_px, tickers, span_days=60, arima_order=(1,0,0)):
+        """
+        Estimate baseline returns using ARIMA model for each ticker.
+        Returns a DataFrame with weekly ARIMA-forecasted returns.
+        """
+        import warnings
+        warnings.filterwarnings("ignore")  # ARIMA can be noisy
+
+        daily_ret = daily_px[tickers].pct_change().dropna()
+        weekly_idx = daily_ret.resample('W-FRI').last().index
+        arima_forecasts = pd.DataFrame(index=weekly_idx, columns=tickers)
+
+        for ticker in tickers:
+            series = daily_ret[ticker].dropna()
+            for week_end in weekly_idx:
+                # Use data up to the week before the forecast
+                train = series.loc[:week_end - pd.Timedelta(days=1)]
+                if len(train) < span_days:
+                    arima_forecasts.at[week_end, ticker] = np.nan
+                    continue
+                try:
+                    model = ARIMA(train, order=arima_order)
+                    fit = model.fit()
+                    # Forecast 5 steps ahead (1 week, if 5 trading days)
+                    forecast = fit.forecast(steps=5)
+                    # Use the mean of the 5-day forecast as the weekly return
+                    arima_forecasts.at[week_end, ticker] = forecast.mean()
+                except Exception as e:
+                    arima_forecasts.at[week_end, ticker] = np.nan
+
+        arima_forecasts.columns = [f"{c}_baseline_ret" for c in arima_forecasts.columns]
+        return arima_forecasts
     
     def prepare_prompt(self, row: pd.Series, default: float = 0.0) -> str:
         """
@@ -432,7 +465,8 @@ class EquityAgent(PortfolioAgent):
 
         # ── 1.  add baseline_ret columns  ─────────────────────────────────
         tickers     = [p["etf"] for p in PORTFOLIOS["equity"]["sectors"]]
-        baseline_w  = self.estimate_returns(data_d[tickers], tickers)             # <- ewma_1m
+        # baseline_w  = self.estimate_returns(data_d[tickers], tickers)             # <- ewma_1m
+        baseline_w  = self.estimate_returns_ARIMA(data_d[tickers], tickers)       # <- arima_1w
         baseline_w   = baseline_w.reindex(data_w.index)
         data_w      = pd.concat([data_w, baseline_w], axis=1)
 
