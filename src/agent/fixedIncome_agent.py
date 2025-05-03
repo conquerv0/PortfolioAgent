@@ -337,7 +337,7 @@ class FixedIncomeAgent(PortfolioAgent):
     """
     def __init__(self, data_collector: FixedIncomeDataCollector, llm_client: OpenAI):
         super().__init__(name="FixedIncomeAgent", data_collector=data_collector, llm_client=llm_client)
-        # You might extend the prediction schema or prompt details if needed.
+    
     
     def estimate_returns(self,
                          daily_ret_df: pd.DataFrame,
@@ -364,7 +364,7 @@ class FixedIncomeAgent(PortfolioAgent):
                               ) -> pd.DataFrame:
         """
         Fit an ARIMA(1,0,0) on the **weekly** returns series, then one‐step forecast.
-        - First aggregates your daily returns into weekly returns: (1+rt).prod()−1.
+        - First aggregates daily returns into weekly returns: (1+rt).prod()−1.
         - Then for each ETF, fits ARIMA on that weekly series and forecasts next week.
         Returns a DataFrame indexed by the same Fridays, with the forecast in 
         columns ['SHV_baseline_ret', …].
