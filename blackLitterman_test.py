@@ -419,7 +419,7 @@ def main():
         return
     
     os.makedirs('data/evaluation', exist_ok=True)
-    results_df.to_csv('data/evaluation/portfolio_returns_backtest.csv', index=False)
+    results_df.to_csv(f'data/evaluation/{asset_class}_portfolio_returns_backtest.csv', index=False)
     plot_cumulative_returns(results_df, asset_class)
     
     # Calculate performance metrics for the BL portfolio returns
