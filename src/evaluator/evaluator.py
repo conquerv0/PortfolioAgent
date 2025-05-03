@@ -109,6 +109,9 @@ if asset_class == "fi":
     # align with next‑week forecast
     # if pred_df is prediction for week t→t+1, we shift weekly returns up
     realised = weekly.shift(-1).reindex(pred.index).fillna(0)
+else:
+    weekly_px = px.resample("W-FRI").last().loc[START:END]
+    realised  = weekly_px.pct_change().shift(-1).loc[pred.index]
 
 # ------------------------------------------------------------------
 # 2.  DIRECTIONAL & ERROR METRICS
