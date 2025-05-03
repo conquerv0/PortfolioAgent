@@ -102,6 +102,55 @@ def load_portfolio_returns(asset_classes: List[str]) -> Dict[str, pd.DataFrame]:
             print(f"Warning: Could not find returns data for {asset}")
     return returns_data
 
+def calculate_performance_metrics(returns_series, weights_history=None, risk_free_rate=0.03):
+    """
+    Calculate performance metrics from a return series.
+    
+    Args:
+        returns_series: Series or array of returns
+        weights_history: List of portfolio weights over time (for turnover calculation)
+        risk_free_rate: Annual risk-free rate
+        
+    Returns:
+        Dictionary of metrics including:
+        - Annualized Return
+        - Annualized Standard Deviation
+        - Sharpe Ratio
+        - Maximum Drawdown
+        - Average Turnover (if weights_history is provided)
+    """
+    total_return = (1 + returns_series).prod() - 1
+    n_periods = len(returns_series)
+    annual_return = (1 + total_return) ** (52 / n_periods) - 1  # Assuming weekly returns
+    annual_std = returns_series.std() * np.sqrt(52)
+    sharpe_ratio = (annual_return - risk_free_rate) / annual_std if annual_std > 0 else np.nan
+    
+    cum_returns = (1 + returns_series).cumprod()
+    running_max = cum_returns.cummax()
+    drawdown = (cum_returns - running_max) / running_max
+    max_drawdown = drawdown.min()
+    
+    metrics = {
+        'Annualized Return': annual_return,
+        'Annualized Std Dev': annual_std,
+        'Sharpe Ratio': sharpe_ratio,
+        'Max Drawdown': max_drawdown
+    }
+    
+    if weights_history is not None and len(weights_history) > 1:
+        turnovers = []
+        for i in range(1, len(weights_history)):
+            prev = weights_history[i-1]
+            current = weights_history[i]
+            turnover = np.sum(np.abs(current - prev))
+            turnovers.append(turnover)
+        avg_turnover = np.mean(turnovers)
+        metrics['Average Turnover'] = avg_turnover
+    else:
+        metrics['Average Turnover'] = np.nan
+    
+    return metrics
+
 def plot_portfolio_comparison(manager: PortfolioManager, returns_data: Dict[str, pd.DataFrame], dates_list):
     """
     Plot comparison between managed portfolio and equal-weighted portfolio.
@@ -121,9 +170,8 @@ def plot_portfolio_comparison(manager: PortfolioManager, returns_data: Dict[str,
     # Calculate managed portfolio returns
     for asset, df in returns_data.items():
         df = df.set_index('date')
-        # Store BL returns and equal-weighted returns
+        # Store BL returns
         aligned_returns[f'{asset}_bl_return'] = df['bl_portfolio_return']
-        aligned_returns[f'{asset}_eq_return'] = df['equal_weighted_return']
     
     # Calculate managed portfolio returns with time-varying weights
     managed_returns = pd.Series(0.0, index=pd.DatetimeIndex(dates_list))
@@ -142,12 +190,11 @@ def plot_portfolio_comparison(manager: PortfolioManager, returns_data: Dict[str,
                     # Use the weight for this specific period
                     weight = weight_history[asset][i]
                     bl_return = aligned_returns.loc[date, f'{asset}_bl_return']
-                    eq_return = aligned_returns.loc[date, f'{asset}_eq_return']
                     
                     if not pd.isna(bl_return):
                         managed_returns[date] += bl_return * weight
-                    if not pd.isna(eq_return):
-                        equal_weighted_returns[date] += eq_return * 0.25
+                        # Use the same BL returns but with equal weights (1/4 each)
+                        equal_weighted_returns[date] += bl_return * 0.25
     
     # Calculate cumulative returns
     cumulative_managed = (1 + managed_returns).cumprod() - 1
@@ -166,7 +213,7 @@ def plot_portfolio_comparison(manager: PortfolioManager, returns_data: Dict[str,
     
     # Save the plot
     os.makedirs('data/evaluation/manager', exist_ok=True)
-    plt.savefig('data/evaluation/manager/portfolio_comparison.png')
+    plt.savefig('data/evaluation/manager/manager_agent_portfolio_comparison.png')
     
     # Calculate final performance metrics
     final_managed_return = cumulative_managed.iloc[-1]
@@ -175,6 +222,36 @@ def plot_portfolio_comparison(manager: PortfolioManager, returns_data: Dict[str,
     print(f"Dynamic Weight Portfolio: {final_managed_return:.2%}")
     print(f"Equal-Weighted Portfolio: {final_equal_return:.2%}")
     print(f"Outperformance: {(final_managed_return - final_equal_return):.2%}")
+    
+    # Calculate and display performance metrics
+    print("\nPerformance Metrics:")
+    # Convert weight_history to the format needed for turnover calculation
+    flattened_weights = []
+    for i in range(len(dates_list)):
+        weights = []
+        for asset in manager.asset_classes:
+            if i < len(weight_history[asset]):
+                weights.append(weight_history[asset][i])
+        if weights:
+            flattened_weights.append(np.array(weights))
+    
+    # Create equal weights history - constant 0.25 for each asset
+    equal_flattened_weights = []
+    for i in range(len(dates_list)):
+        equal_flattened_weights.append(np.array([0.25] * len(manager.asset_classes)))
+    
+    managed_metrics = calculate_performance_metrics(managed_returns, flattened_weights)
+    equal_metrics = calculate_performance_metrics(equal_weighted_returns, equal_flattened_weights)
+    
+    print("\nDynamic Weight Portfolio:")
+    for key, value in managed_metrics.items():
+        print(f"  {key}: {value:.4f}")
+    
+    print("\nEqual-Weighted Portfolio:")
+    for key, value in equal_metrics.items():
+        print(f"  {key}: {value:.4f}")
+    
+    return managed_returns, equal_weighted_returns, managed_metrics, equal_metrics
 
 def plot_weight_evolution(manager: PortfolioManager, dates_list):
     """
@@ -198,7 +275,7 @@ def plot_weight_evolution(manager: PortfolioManager, dates_list):
     
     # Save the plot
     os.makedirs('data/evaluation/manager', exist_ok=True)
-    plt.savefig('data/evaluation/manager/weight_evolution.png')
+    plt.savefig('data/evaluation/manager/manager_agent_weight_evolution.png')
 
 def simulate_rolling_portfolio_management(asset_classes: List[str], lookback_period: int = 1) -> Tuple[PortfolioManager, List[datetime]]:
     """
@@ -242,6 +319,44 @@ def simulate_rolling_portfolio_management(asset_classes: List[str], lookback_per
         
     return manager, common_dates[lookback_period:]
 
+def save_weight_history_to_df(manager: PortfolioManager, dates_list):
+    """
+    Convert the weight history to a DataFrame and save it to a CSV file.
+    
+    Args:
+        manager: PortfolioManager instance with weight history
+        dates_list: List of dates corresponding to weight changes
+    
+    Returns:
+        DataFrame containing the weight history
+    """
+    # Create a DataFrame with dates as index
+    weight_df = pd.DataFrame(index=dates_list)
+    
+    # Skip the initial weights (which are just the starting weights)
+    weight_history = manager.get_weight_history()
+    for asset in manager.asset_classes:
+        weights = weight_history[asset][1:]  # Skip first entry (initial weight)
+        if len(weights) == len(dates_list):
+            weight_df[asset] = weights
+        else:
+            # Handle cases where lengths don't match
+            print(f"Warning: Number of weights for {asset} ({len(weights)}) doesn't match number of dates ({len(dates_list)})")
+            # Pad with NaN if needed
+            padded_weights = weights + [np.nan] * (len(dates_list) - len(weights))
+            weight_df[asset] = padded_weights[:len(dates_list)]
+    
+    # Save to CSV
+    os.makedirs('data/evaluation/manager', exist_ok=True)
+    weight_df.to_csv('data/evaluation/manager/manager_agent_weight_history_monthly.csv')
+    
+    # Also create a monthly resampled version
+    weight_df.index = pd.DatetimeIndex(weight_df.index)
+    monthly_weights = weight_df.resample('MS').first()  # MS = Month Start
+    monthly_weights.to_csv('data/evaluation/manager/manager_agent_weight_history_monthly_resampled.csv')
+    
+    return weight_df, monthly_weights
+
 def main():
     # Simulate rolling portfolio management
     asset_classes = ['commodity', 'equity', 'fx', 'fi']
@@ -255,9 +370,28 @@ def main():
     for asset, weight in manager.get_current_weights().items():
         print(f"{asset}: {weight:.2%}")
     
-    # Plot performance charts
-    plot_portfolio_comparison(manager, returns_data, dates_list)
+    # Plot performance charts and calculate metrics
+    managed_returns, equal_returns, managed_metrics, equal_metrics = plot_portfolio_comparison(manager, returns_data, dates_list)
     plot_weight_evolution(manager, dates_list)
+    
+    # Save weight history to DataFrame
+    weight_df, monthly_weights = save_weight_history_to_df(manager, dates_list)
+    
+    # Print the monthly weights
+    print("\nMonthly Portfolio Weights:")
+    pd.set_option('display.max_rows', None)
+    pd.set_option('display.precision', 4)
+    print(monthly_weights)
+    
+    # Create a DataFrame to store and save metrics
+    metrics_df = pd.DataFrame({
+        'Metric': list(managed_metrics.keys()),
+        'Dynamic Portfolio': list(managed_metrics.values()),
+        'Equal-Weighted Portfolio': list(equal_metrics.values())
+    })
+    
+    os.makedirs('data/evaluation/manager', exist_ok=True)
+    metrics_df.to_csv('data/evaluation/manager/manager_agent_performance_metrics.csv', index=False)
 
 if __name__ == "__main__":
     main()
