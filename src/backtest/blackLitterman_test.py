@@ -479,7 +479,7 @@ def plot_cumulative_returns(results_df, asset_class):
 # Main function
 def main():
     # Change asset_class to "fx", "fi", "equity", or "commodity" as needed
-    asset_class = "fx"  
+    asset_class = "equity"  
     predictions, actual_data = load_data(asset_class=asset_class)
     
     if asset_class == "fx":

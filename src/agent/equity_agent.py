@@ -294,12 +294,12 @@ class EquityAgent(PortfolioAgent):
                                           
         Respond **only** with valid JSON conforming to the provided schema.
         """)  
-        # 1️⃣ extract every {placeholder} name in the template
+        # extract every {placeholder} name in the template
         field_names = {name.split(':')[0]                    # strip any format spec
                     for _, name, _, _ in Formatter().parse(PROMPT_TEMPLATE)
                     if name}
 
-        # 2️⃣ build a mapping, filling missing/NaN with the chosen default
+        # build a mapping, filling missing/NaN with the chosen default
         mapping = {f: float(row.get(f, default) or default) for f in field_names}
         
         # Add volatility data for each ETF (vol_1m)
@@ -309,7 +309,7 @@ class EquityAgent(PortfolioAgent):
             if vol_1m_key not in mapping and vol_1m_key in row:
                 mapping[vol_1m_key] = float(row[vol_1m_key] if not pd.isna(row[vol_1m_key]) else default)
 
-        # 3️⃣ format
+        # format
         return PROMPT_TEMPLATE.format(**mapping)
 
 

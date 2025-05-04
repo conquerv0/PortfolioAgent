@@ -9,6 +9,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import PORTFOLIOS  
 
 
+# Set the asset class to evaluate
+asset_class = "equity"  # fx, equity, fi, commodity
+
 # ------------------------------------------------------------------
 # 1.  CONFIG & DATA
 # ------------------------------------------------------------------
@@ -62,7 +65,7 @@ def load_bond_etf_returns(filepath: str) -> pd.DataFrame:
     
     return full_return_df
 
-asset_class = "fx"  # fx, equity, fi, commodity
+
 PRED_FILE   = f"data/predictions/{asset_class}_weekly_predictions.csv"  
 PRICE_FILE  = f"data/features/{asset_class}_combined_features_weekly.csv"       # already saved
 fx_tickers = [entry["etf"] for entry in PORTFOLIOS['fx'].get("currencies", [])]
@@ -303,10 +306,6 @@ if results:
     stats_df_display['Avg Confidence'] = stats_df_display['Avg Confidence'].apply(lambda x: f"{x*100:.2f}%")
     print(stats_df_display.to_string(index=False))
     
-
-# ------------------------------------------------------------------
-# 4.  PLOT – average across all sectors
-# ------------------------------------------------------------------
 
 # ------------------------------------------------------------------
 # lead-lag IC diagnostic  (-2 … +2 weeks)
