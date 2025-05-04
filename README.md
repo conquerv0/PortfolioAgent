@@ -28,13 +28,14 @@ PortfolioAgent is a framework that combines traditional financial models with AI
 ```
 ├── src/                     # Source code
 │   ├── agent/               # Agent implementations
+│   │   ├── DataCollector.py     # Data collection utilities
 │   │   ├── PortfolioAgent.py    # Base agent class
 │   │   ├── equity_agent.py      # Equity-specific agent
 │   │   ├── fixedIncome_agent.py # Fixed income agent
 │   │   ├── fx_agent.py          # Foreign exchange agent
 │   │   ├── commodity_agent.py   # Commodity agent
-│   │   ├── manager_agent.py     # Manager agent coordinating other agents
-│   │   └── DataCollector.py     # Data collection utilities
+│   │   └── manager_agent.py     # Manager agent coordinating other agents
+
 │   ├── backtest/            # Backtesting framework
 │   │   └── blackLitterman_test.py # Black-Litterman model implementation
 │   ├── config/              # Configuration settings
