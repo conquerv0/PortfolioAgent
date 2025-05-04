@@ -263,19 +263,19 @@ class EquityAgent(PortfolioAgent):
         • MOVE…… {MOVE:.2f} (Δ {MOVE_weekly_change:.3f})
         
         ▌Sector ETF data:                                                                    
-        | Sector (ETF) | adj_close | baseline_ret | ewma_1w | ewma_1m |
-        |--------------|-------|--------------|---------|---------|
-        | Information Technology (XLK) | {XLK:.4f} | {XLK_baseline_ret:.4f} | {XLK_ewma_1w:.4f} | {XLK_ewma_1m:.4f} |
-        | Health Care (XLV)            | {XLV:.4f} | {XLV_baseline_ret:.4f} | {XLV_ewma_1w:.4f} | {XLV_ewma_1m:.4f} |
-        | Financials (XLF)             | {XLF:.4f} | {XLF_baseline_ret:.4f} | {XLF_ewma_1w:.4f} | {XLF_ewma_1m:.4f} |
-        | Consumer Discretionary (XLY) | {XLY:.4f} | {XLY_baseline_ret:.4f} | {XLY_ewma_1w:.4f} | {XLY_ewma_1m:.4f} |
-        | Communication Services (XLC) | {XLC:.4f} | {XLC_baseline_ret:.4f} | {XLC_ewma_1w:.4f} | {XLC_ewma_1m:.4f} |
-        | Industrials (XLI)            | {XLI:.4f} | {XLI_baseline_ret:.4f} | {XLI_ewma_1w:.4f} | {XLI_ewma_1m:.4f} |
-        | Consumer Staples (XLP)       | {XLP:.4f} | {XLP_baseline_ret:.4f} | {XLP_ewma_1w:.4f} | {XLP_ewma_1m:.4f} |
-        | Energy (XLE)                 | {XLE:.4f} | {XLE_baseline_ret:.4f} | {XLE_ewma_1w:.4f} | {XLE_ewma_1m:.4f} |
-        | Utilities (XLU)              | {XLU:.4f} | {XLU_baseline_ret:.4f} | {XLU_ewma_1w:.4f} | {XLU_ewma_1m:.4f} |
-        | Real Estate (XLRE)           | {XLRE:.4f} | {XLRE_baseline_ret:.4f} | {XLRE_ewma_1w:.4f} | {XLRE_ewma_1m:.4f} |
-        | Materials (XLB)              | {XLB:.4f} | {XLB_baseline_ret:.4f} | {XLB_ewma_1w:.4f} | {XLB_ewma_1m:.4f} |
+        | Sector (ETF) | adj_close | baseline_ret | ewma_1w | ewma_1m | vol_1m |
+        |--------------|-------|--------------|---------|---------|---------|
+        | Information Technology (XLK) | {XLK:.4f} | {XLK_baseline_ret:.4f} | {XLK_ewma_1w:.4f} | {XLK_ewma_1m:.4f} | {XLK_vol_1m:.4f} |
+        | Health Care (XLV)            | {XLV:.4f} | {XLV_baseline_ret:.4f} | {XLV_ewma_1w:.4f} | {XLV_ewma_1m:.4f} | {XLV_vol_1m:.4f} |
+        | Financials (XLF)             | {XLF:.4f} | {XLF_baseline_ret:.4f} | {XLF_ewma_1w:.4f} | {XLF_ewma_1m:.4f} | {XLF_vol_1m:.4f} |
+        | Consumer Discretionary (XLY) | {XLY:.4f} | {XLY_baseline_ret:.4f} | {XLY_ewma_1w:.4f} | {XLY_ewma_1m:.4f} | {XLY_vol_1m:.4f} |
+        | Communication Services (XLC) | {XLC:.4f} | {XLC_baseline_ret:.4f} | {XLC_ewma_1w:.4f} | {XLC_ewma_1m:.4f} | {XLC_vol_1m:.4f} |
+        | Industrials (XLI)            | {XLI:.4f} | {XLI_baseline_ret:.4f} | {XLI_ewma_1w:.4f} | {XLI_ewma_1m:.4f} | {XLI_vol_1m:.4f} |
+        | Consumer Staples (XLP)       | {XLP:.4f} | {XLP_baseline_ret:.4f} | {XLP_ewma_1w:.4f} | {XLP_ewma_1m:.4f} | {XLP_vol_1m:.4f} |
+        | Energy (XLE)                 | {XLE:.4f} | {XLE_baseline_ret:.4f} | {XLE_ewma_1w:.4f} | {XLE_ewma_1m:.4f} | {XLE_vol_1m:.4f} |
+        | Utilities (XLU)              | {XLU:.4f} | {XLU_baseline_ret:.4f} | {XLU_ewma_1w:.4f} | {XLU_ewma_1m:.4f} | {XLU_vol_1m:.4f} |
+        | Real Estate (XLRE)           | {XLRE:.4f} | {XLRE_baseline_ret:.4f} | {XLRE_ewma_1w:.4f} | {XLRE_ewma_1m:.4f} | {XLRE_vol_1m:.4f} |
+        | Materials (XLB)              | {XLB:.4f} | {XLB_baseline_ret:.4f} | {XLB_ewma_1w:.4f} | {XLB_ewma_1m:.4f} | {XLB_vol_1m:.4f} |
 
         **Task**
         For every ETF provided above, please provide:
@@ -286,8 +286,10 @@ class EquityAgent(PortfolioAgent):
         
         Each baseline_ret is the **expected 1-week total return** (decimal).
         Return variance_view in the *same* units (weekly total return).
+        
+        IMPORTANT: Your predictions should align with current volatility. In higher volatility regimes, your variance_view should be more aggressive (larger magnitude) and not too conservative. Use the volatility metrics as a guide for how bold your predictions should be.
                                           
-        Do **NOT** adjust the baseline yourself – we’ll add it afterwards.
+        Do **NOT** adjust the baseline yourself – we'll add it afterwards.
         Include a top-level field **overall_analysis**.
                                           
         Respond **only** with valid JSON conforming to the provided schema.
@@ -299,6 +301,13 @@ class EquityAgent(PortfolioAgent):
 
         # 2️⃣ build a mapping, filling missing/NaN with the chosen default
         mapping = {f: float(row.get(f, default) or default) for f in field_names}
+        
+        # Add volatility data for each ETF (vol_1m)
+        tickers = ["XLK", "XLV", "XLF", "XLY", "XLC", "XLI", "XLP", "XLE", "XLU", "XLRE", "XLB"]
+        for ticker in tickers:
+            vol_1m_key = f"{ticker}_vol_1m"
+            if vol_1m_key not in mapping and vol_1m_key in row:
+                mapping[vol_1m_key] = float(row[vol_1m_key] if not pd.isna(row[vol_1m_key]) else default)
 
         # 3️⃣ format
         return PROMPT_TEMPLATE.format(**mapping)
