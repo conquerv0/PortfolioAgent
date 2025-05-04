@@ -459,15 +459,15 @@ class FixedIncomeAgent(PortfolioAgent):
                                           
         Respond **only** with valid JSON conforming to the provided schema.
         """)  
-        # 1️⃣ extract every {placeholder} name in the template
+        # extract every {placeholder} name in the template
         field_names = {name.split(':')[0]                    # strip any format spec
                     for _, name, _, _ in Formatter().parse(PROMPT_TEMPLATE)
                     if name}
 
-        # 2️⃣ build a mapping, filling missing/NaN with the chosen default
+        # build a mapping, filling missing/NaN with the chosen default
         mapping = {f: float(row.get(f, default) or default) for f in field_names}
 
-        # 3️⃣ format
+        # format
         return PROMPT_TEMPLATE.format(**mapping)
     
     def get_gpt4o_prediction(self, prompt: str) -> dict:
@@ -476,7 +476,7 @@ class FixedIncomeAgent(PortfolioAgent):
         """
         try:
             response = client.chat.completions.create(
-                model="gpt-4o-mini",                                   # GPT-4o
+                model="gpt-4o",                                   # GPT-4o
                 messages=[
                     {
                         "role": "system",

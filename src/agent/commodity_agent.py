@@ -15,6 +15,7 @@ import yfinance as yf
 from fredapi import Fred
 from openai import OpenAI
 from dotenv import load_dotenv
+from statsmodels.tsa.arima.model import ARIMA
 
 from DataCollector import DataCollector
 from PortfolioAgent import PortfolioAgent
@@ -213,6 +214,50 @@ class CommodityAgent(PortfolioAgent):
         
         return alpha_w
 
+    # ---------------- Baseline estimation (ARIMA) ----------------
+    def estimate_returns_ARIMA(self, daily_px: pd.DataFrame, tickers: List[str], span_days: int = 60, arima_order=(1,0,0)):
+        """
+        Estimate baseline returns using ARIMA model for each ticker.
+        Returns a DataFrame with weekly ARIMA-forecasted returns.
+        """
+        import warnings
+        warnings.filterwarnings("ignore")  # ARIMA can be noisy
+
+        # Ensure all tickers are in the dataframe
+        available_tickers = [t for t in tickers if t in daily_px.columns]
+        if len(available_tickers) != len(tickers):
+            missing = set(tickers) - set(available_tickers)
+            logger.warning(f"Missing tickers in data: {missing}")
+        
+        # Calculate daily returns
+        daily_ret = daily_px[available_tickers].pct_change(fill_method=None).dropna()
+        weekly_idx = daily_ret.resample("W-FRI").last().index
+        arima_forecasts = pd.DataFrame(index=weekly_idx, columns=available_tickers)
+        
+        # For each ticker, fit ARIMA model and forecast
+        for ticker in available_tickers:
+            series = daily_ret[ticker].dropna()
+            for week_end in weekly_idx:
+                # Use data up to the week before the forecast
+                train = series.loc[:week_end - pd.Timedelta(days=1)]
+                if len(train) < span_days:
+                    arima_forecasts.at[week_end, ticker] = np.nan
+                    continue
+                try:
+                    model = ARIMA(train, order=arima_order)
+                    fit = model.fit()
+                    # Forecast 5 steps ahead (1 week, if 5 trading days)
+                    forecast = fit.forecast(steps=5)
+                    # Use the mean of the 5-day forecast as the weekly return
+                    arima_forecasts.at[week_end, ticker] = forecast.mean()
+                except Exception as e:
+                    logger.warning(f"ARIMA failed for {ticker} at {week_end}: {e}")
+                    arima_forecasts.at[week_end, ticker] = np.nan
+        
+        # Rename columns
+        arima_forecasts.columns = [f"{c}_baseline_ret" for c in arima_forecasts.columns]
+        return arima_forecasts
+
     # ---------------- Prompt builder ----------------
     def prepare_prompt(self, row: pd.Series, default: float = 0.0) -> str:
         """Build prompt for LLM with current market data."""
@@ -237,16 +282,22 @@ class CommodityAgent(PortfolioAgent):
         | Agriculture          | {Agriculture_etf} | {Agriculture_px:.4f} | {Agriculture_baseline:.4f} | {Agriculture_ewma_1w:.4f} | {Agriculture_ewma_1m:.4f} | {Agriculture_vol_1m:.4f} |
         | Livestock            | {Livestock_etf} | {Livestock_px:.4f} | {Livestock_baseline:.4f} | {Livestock_ewma_1w:.4f} | {Livestock_ewma_1m:.4f} | {Livestock_vol_1m:.4f} |
 
-        ▌Task
-        For each sector, provide:
-        1. variance_view: alpha vs baseline weekly return (decimal)
-        2. confidence: 0 to 1
-        3. rationale (1 sentence)
-        Add overall_analysis summarising the drivers.
-
-        IMPORTANT: Your predictions should align with current volatility in higher volatility regimes, your variance_view should be more aggressive (larger magnitude) and not too conservative. Use the volatility metrics as a guide for how bold your predictions should be.
+        **Task**
+        For every ETF provided above, please provide:
+        1. Your**variance_view** , it should be a high conviction (can be aggressive, avoid neutral, conservative) view on the alpha you expect above/below baseline weekly return based on the analysis and reflect the relative outperformance or underperformance of the different ETF in the portfolio for next week as a decimal. 
+        2. A confidence score between 0 and 1,
+        3. A brief rationale for the prediction. reference the data we supplied. (ex. "INDPRO +0.6 % and VIX −12 % indicate risk-on rotation.")
+        4. Provide an include a top-level field **overall_analysis** summarizing how the data inform your predictions.
         
-        Respond only with JSON matching the schema.
+        Each baseline_ret is the **expected 1-week total return** (decimal).
+        Return variance_view in the *same* units (weekly total return).
+        
+        IMPORTANT: Your predictions should align with current volatility. In higher volatility regimes, your variance_view should be more aggressive (larger magnitude) and not too conservative. Use the volatility metrics as a guide for how bold your predictions should be.
+                                          
+        Do **NOT** adjust the baseline yourself – we'll add it afterwards.
+        Include a top-level field **overall_analysis**.
+                                          
+        Respond **only** with valid JSON conforming to the provided schema.
         """)
 
         # Helper to safely convert values to float
@@ -296,7 +347,7 @@ class CommodityAgent(PortfolioAgent):
         """Query LLM for commodity predictions."""
         try:
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": "You are a commodities strategist forecasting 1 week alpha vs baseline for broad commodity sectors."},
                     {"role": "user", "content": prompt}
@@ -333,7 +384,7 @@ class CommodityAgent(PortfolioAgent):
 
         # Calculate baseline returns
         daily = pd.read_csv("data/features/commodity_combined_features_daily.csv", index_col=0, parse_dates=True)
-        baseline = self.estimate_returns(daily, TICKERS).reindex(weekly.index)
+        baseline = self.estimate_returns_ARIMA(daily, TICKERS).reindex(weekly.index)
         weekly = pd.concat([weekly, baseline], axis=1)
 
         # Process each week

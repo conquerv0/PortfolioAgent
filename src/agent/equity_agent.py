@@ -322,7 +322,7 @@ class EquityAgent(PortfolioAgent):
         """
         try:
             response = client.chat.completions.create(
-                model="gpt-4o-mini",                                   # GPT-4o
+                model="gpt-4o",                                   # GPT-4o
                 messages=[
                     {
                         "role": "system",
