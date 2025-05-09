@@ -71,7 +71,7 @@ PREDICTION_SCHEMA = {
                         },
                         "rationale": {
                             "type": "string",
-                            "description": "Brief rationale"
+                            "description": "Brief rationale referencing the data provided"
                         }
                     },
                     "required": ["instrument", "variance_view", "confidence", "rationale"],
